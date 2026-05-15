@@ -93,6 +93,8 @@ export class OrderService {
       });
       this.io.emit(EVENTS.ACCOUNTING_UPDATED, record);
     }
+    return order;
+  }
 
   async archiveOrder(orderId: string, archived: boolean = true) {
     const order = await prisma.order.update({
