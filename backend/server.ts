@@ -1,4 +1,5 @@
 import express from 'express';
+console.log("🚀 RAILWAY DEPLOY SUCCESSFUL - Version 3.0");
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
