@@ -13,9 +13,21 @@ class OrderService {
     }
     async placeOrder(data) {
         try {
+            // Allow locationId to be either the ID or the Name of the table
+            let location = await prisma.location.findFirst({
+                where: {
+                    OR: [
+                        { id: data.locationId },
+                        { name: data.locationId }
+                    ]
+                }
+            });
+            if (!location) {
+                throw new Error(`Location not found for identifier: ${data.locationId}`);
+            }
             const order = await prisma.order.create({
                 data: {
-                    locationId: data.locationId,
+                    locationId: location.id,
                     customerName: data.customerName,
                     notes: data.notes,
                     paymentMethod: data.paymentMethod,

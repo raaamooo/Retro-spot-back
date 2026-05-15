@@ -16,10 +16,39 @@ dotenv_1.default.config();
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const ALLOWED_ORIGINS = [FRONTEND_URL, 'http://localhost:3000'];
+// Accept any origin that is localhost, the configured FRONTEND_URL,
+// or any Cloudflare quick-tunnel subdomain (*.trycloudflare.com)
+const isAllowedOrigin = (origin) => {
+    if (!origin)
+        return true; // same-origin / non-browser requests
+    if (origin === FRONTEND_URL)
+        return true;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+        return true;
+    if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin))
+        return true;
+    if (origin.endsWith('.up.railway.app'))
+        return true;
+    return false;
+};
+const corsOptions = {
+    origin: (origin, cb) => {
+        if (isAllowedOrigin(origin))
+            cb(null, true);
+        else
+            cb(new Error(`CORS: origin '${origin}' not allowed`));
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+};
 const io = new socket_io_1.Server(httpServer, {
     cors: {
-        origin: ALLOWED_ORIGINS,
+        origin: (origin, cb) => {
+            if (isAllowedOrigin(origin))
+                cb(null, true);
+            else
+                cb(new Error(`CORS: origin '${origin}' not allowed`));
+        },
         methods: ['GET', 'POST', 'PATCH', 'DELETE'],
         credentials: true,
     },
@@ -30,11 +59,7 @@ const uploadsDir = path_1.default.join(__dirname, 'public/uploads');
 if (!fs_1.default.existsSync(uploadsDir))
     fs_1.default.mkdirSync(uploadsDir, { recursive: true });
 // ── CORS ─────────────────────────────────────────────────────────
-app.use((0, cors_1.default)({
-    origin: ALLOWED_ORIGINS,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    credentials: true,
-}));
+app.use((0, cors_1.default)(corsOptions));
 // ── Body parsing (5 MB cap) ───────────────────────────────────────
 app.use(express_1.default.json({ limit: '5mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '5mb' }));

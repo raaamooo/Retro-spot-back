@@ -328,7 +328,7 @@ function apiRoutes(io, prisma) {
     });
     router.get('/locations/:id/qr', async (req, res) => {
         try {
-            const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+            const baseUrl = req.query.baseUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
             const qrDataUrl = await (0, qr_1.generateLocationQR)(req.params.id, baseUrl);
             res.json({ qrCodeUrl: qrDataUrl });
         }
@@ -669,7 +669,7 @@ function apiRoutes(io, prisma) {
     });
     router.patch('/workers/:id', async (req, res) => {
         try {
-            const { name, role, phone, email, active } = req.body;
+            const { name, role, phone, email, active, password } = req.body;
             const data = {};
             if (name !== undefined)
                 data.name = name;
@@ -681,6 +681,10 @@ function apiRoutes(io, prisma) {
                 data.email = email;
             if (active !== undefined)
                 data.active = active;
+            if (password) {
+                const bcrypt = await Promise.resolve().then(() => __importStar(require('bcryptjs')));
+                data.passwordHash = await bcrypt.hash(password, 10);
+            }
             const worker = await prisma.user.update({
                 where: { id: req.params.id },
                 data,
@@ -690,6 +694,15 @@ function apiRoutes(io, prisma) {
         }
         catch (err) {
             res.status(500).json({ error: 'Failed to update worker' });
+        }
+    });
+    router.delete('/workers/:id', async (req, res) => {
+        try {
+            await prisma.user.delete({ where: { id: req.params.id } });
+            res.json({ success: true });
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to delete worker' });
         }
     });
     return router;
