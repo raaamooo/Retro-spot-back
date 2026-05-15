@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "preinstall": "echo \"DATABASE_URL=postgresql://localhost:5432/db\" > .env",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch server.ts",
     "build": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost:5432/db} tsc && npx prisma generate",
