@@ -323,10 +323,28 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
     }
   });
 
+  router.patch('/orders/:id/archive', async (req, res) => {
+    try {
+      const order = await orderService.archiveOrder(req.params.id, req.body.archived !== false);
+      res.json(order);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to archive order' });
+    }
+  });
+
   router.get('/orders', async (req, res) => {
     try {
       const where: any = {};
       if (req.query.status) where.status = req.query.status as string;
+      
+      // Default to archived: false unless explicitly requested otherwise
+      if (req.query.archived === 'true') {
+        where.archived = true;
+      } else if (req.query.archived === 'all') {
+        // Don't add archived to where clause
+      } else {
+        where.archived = false;
+      }
 
       const orders = await prisma.order.findMany({
         where,

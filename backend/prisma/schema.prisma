@@ -106,7 +106,8 @@ model Order {
   tipAmount     Float    @default(0)
   subtotal      Float    @default(0)
   total         Float    @default(0)
-  status        String   @default("placed") // placed, barista, waiter, cashier, completed, archived
+  status        String   @default("placed") // placed, barista, waiter, cashier, completed
+  archived      Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

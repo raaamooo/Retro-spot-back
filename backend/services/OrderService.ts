@@ -94,6 +94,17 @@ export class OrderService {
       this.io.emit(EVENTS.ACCOUNTING_UPDATED, record);
     }
 
+  async archiveOrder(orderId: string, archived: boolean = true) {
+    const order = await prisma.order.update({
+      where: { id: orderId },
+      data: { archived },
+      include: {
+        items: { include: { menuItem: true } },
+        location: true
+      }
+    });
+
+    this.io.emit(EVENTS.ORDER_STATUS_UPDATED, order);
     return order;
   }
 }
