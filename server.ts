@@ -22,6 +22,7 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (origin === FRONTEND_URL) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) return true;
+  if (origin.endsWith('.up.railway.app')) return true;
   return false;
 };
 
