@@ -14,13 +14,14 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://retro-spot-front-production.up.railway.app';
 
 // Accept any origin that is localhost, the configured FRONTEND_URL,
 // or any Cloudflare quick-tunnel subdomain (*.trycloudflare.com)
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true; // same-origin / non-browser requests
   if (origin === FRONTEND_URL) return true;
+  if (origin === 'https://retro-spot-front-production.up.railway.app') return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) return true;
   if (origin.endsWith('.up.railway.app')) return true;
