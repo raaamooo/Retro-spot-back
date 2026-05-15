@@ -7,7 +7,7 @@
     "preinstall": "echo \"DATABASE_URL=postgresql://localhost:5432/db\" > .env",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch server.ts",
-    "build": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost:5432/db} tsc && npx prisma generate",
+    "build": "export DATABASE_URL=${DATABASE_URL:-postgresql://localhost:5432/db} && tsc && npx prisma generate",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
