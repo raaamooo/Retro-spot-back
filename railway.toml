@@ -4,7 +4,7 @@ buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npm start"
-preDeployCommand = "npx prisma migrate deploy"
+preDeployCommand = "npx prisma db push --accept-data-loss"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
