@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Users/Admin Workers
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  role         String   // barista, waiter, cashier, inventory, manager, organizer
+  phone        String?
+  email        String?  @unique
+  passwordHash String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 2. Locations
+model Location {
+  id            String   @id @default(uuid())
+  name          String   // "Table 1", "Room 1"
+  type          String   // table, room, workspace, custom
+  qrCodeUrl     String?
+  active        Boolean  @default(true)
+  orders        Order[]
+  waiterCalls   WaiterCall[]
+  receiptGroups ReceiptGroup[]
+}
+
+// 3. Menu Categories
+model MenuCategory {
+  id        String   @id @default(uuid())
+  nameEn    String
+  nameAr    String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  items     MenuItem[]
+}
+
+// 4. Menu Items
+model MenuItem {
+  id            String   @id @default(uuid())
+  categoryId    String
+  nameEn        String
+  nameAr        String
+  descriptionEn String?
+  descriptionAr String?
+  price         Float
+  imageUrl      String?
+  available     Boolean  @default(true)
+  tags          String?  // comma-separated for "Play With Us"
+  active        Boolean  @default(true)
+
+  category      MenuCategory @relation(fields: [categoryId], references: [id])
+  recipes       Recipe[]
+  orderItems    OrderItem[]
+}
+
+// 5. Additions
+model Addition {
+  id                    String   @id @default(uuid())
+  nameEn                String
+  nameAr                String
+  price                 Float
+  imageUrl              String?
+  compatibleMenuItemIds String?  // comma separated JSON array representation
+  active                Boolean  @default(true)
+}
+
+// 6. Ingredients
+model Ingredient {
+  id                String   @id @default(uuid())
+  nameEn            String
+  nameAr            String
+  unit              String   // liter, ml, gram, kg, piece
+  quantityAvailable Float
+  lowStockThreshold Float
+  active            Boolean  @default(true)
+  recipes           Recipe[]
+}
+
+// 7. Item Ingredients Recipe
+model Recipe {
+  id           String     @id @default(uuid())
+  menuItemId   String
+  ingredientId String
+  quantityUsed Float
+
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id])
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+}
+
+// 8. Orders
+model Order {
+  id            String   @id @default(uuid())
+  locationId    String
+  customerName  String?
+  notes         String?
+  paymentMethod String?  // cash, visa
+  tipAmount     Float    @default(0)
+  subtotal      Float    @default(0)
+  total         Float    @default(0)
+  status        String   @default("placed") // placed, barista, waiter, cashier, completed, archived
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  location      Location @relation(fields: [locationId], references: [id])
+  items         OrderItem[]
+  receiptGroup  ReceiptGroup? @relation(fields: [receiptGroupId], references: [id])
+  receiptGroupId String?
+}
+
+// 9. Order Items
+model OrderItem {
+  id              String   @id @default(uuid())
+  orderId         String
+  menuItemId      String
+  quantity        Int
+  additions       String?  // JSON string
+  itemPriceAtTime Float
+  notes           String?
+
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem        MenuItem @relation(fields: [menuItemId], references: [id])
+}
+
+// 10. Waiter Calls
+model WaiterCall {
+  id         String    @id @default(uuid())
+  locationId String
+  status     String    @default("active") // active, resolved
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  location   Location  @relation(fields: [locationId], references: [id])
+}
+
+// 11. Receipt Groups
+model ReceiptGroup {
+  id         String    @id @default(uuid())
+  locationId String
+  status     String    @default("open") // open, printed, paid, cleared
+  total      Float     @default(0)
+  printedAt  DateTime?
+  clearedAt  DateTime?
+
+  location   Location  @relation(fields: [locationId], references: [id])
+  orders     Order[]
+}
+
+// 12. Bookings
+model Booking {
+  id                       String    @id @default(uuid())
+  eventType                String
+  name                     String
+  peopleCount              Int
+  notes                    String?
+  date                     String
+  startTime                String
+  endTime                  String
+  paymentMethod            String?   // card, instapay, mobile_wallet
+  paymentStatus            String    @default("pending") // pending, submitted, verified, rejected
+  transactionScreenshotUrl String?
+  totalPrice               Float     @default(0)
+  status                   String    @default("pending") // pending, confirmed, cancelled, completed
+  createdAt                DateTime  @default(now())
+}
+
+// 13. Arts
+model Art {
+  id            String   @id @default(uuid())
+  titleEn       String
+  titleAr       String
+  artistName    String
+  descriptionEn String?
+  descriptionAr String?
+  imageUrl      String?
+  price         Float
+  status        String   @default("submitted") // submitted, approved, rejected, selected_for_bid, sold
+  contactInfo   String?
+  createdAt     DateTime @default(now())
+  bids          ArtBid[]
+}
+
+// 14. Art Bids
+model ArtBid {
+  id                       String   @id @default(uuid())
+  artId                    String
+  bidderName               String
+  bidderContact            String
+  bidAmount                Float
+  paymentMethod            String?
+  paymentStatus            String?
+  transactionScreenshotUrl String?
+  status                   String   @default("active") // active, winning, lost, paid, archived
+  createdAt                DateTime @default(now())
+
+  art                      Art      @relation(fields: [artId], references: [id])
+}
+
+// 15. News
+model News {
+  id            String    @id @default(uuid())
+  titleEn       String
+  titleAr       String
+  descriptionEn String?
+  descriptionAr String?
+  imageUrl      String?
+  type          String    // new_item, event, discount, announcement
+  active        Boolean   @default(true)
+  startDate     DateTime?
+  endDate       DateTime?
+}
+
+// 16. Accounting Records
+model AccountingRecord {
+  id            String   @id @default(uuid())
+  source        String   // menu, booking, art, bid, tip
+  amount        Float
+  paymentMethod String
+  relatedId     String?  // Reference ID of order, booking, or art
+  createdAt     DateTime @default(now())
+}
