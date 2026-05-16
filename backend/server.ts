@@ -8,6 +8,7 @@ import { PrismaClient } from '@prisma/client';
 import { registerSocketHandlers } from './socketEvents';
 import path from 'path';
 import fs from 'fs';
+import { getConfig, updateConfig } from './configManager';
 
 dotenv.config();
 
@@ -69,12 +70,16 @@ app.use('/items', express.static(path.join(__dirname, 'public/items')));
 
 // ── Config endpoint for frontend ──────────────────────────────────
 app.get('/api/config', (req, res) => {
-  res.json({
-    instapayPhone: process.env.INSTAPAY_PHONE || '01012345678',
-    mobileWalletPhone: process.env.MOBILE_WALLET_PHONE || '01012345678',
-    mapEmbedUrl: process.env.MAP_EMBED_URL || '',
-    paymentProvider: process.env.PAYMENT_PROVIDER_PLACEHOLDER || 'instapay',
-  });
+  res.json(getConfig());
+});
+
+app.post('/api/config', (req, res) => {
+  try {
+    const updated = updateConfig(req.body);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update config' });
+  }
 });
 
 // ── Request logging (dev only) ────────────────────────────────────
