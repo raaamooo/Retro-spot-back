@@ -391,8 +391,9 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
 
   router.post('/waitercalls', async (req, res) => {
     try {
+      const { locationId, type } = req.body;
       const call = await prisma.waiterCall.create({
-        data: { locationId: req.body.locationId },
+        data: { locationId, type: type || 'waiter' },
         include: { location: true },
       });
       io.emit(EVENTS.WAITER_CALL_NEW, call);

@@ -135,6 +135,7 @@ model OrderItem {
 model WaiterCall {
   id         String    @id @default(uuid())
   locationId String
+  type       String    @default("waiter") // "waiter", "check"
   status     String    @default("active") // active, resolved
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
