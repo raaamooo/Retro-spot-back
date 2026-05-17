@@ -336,6 +336,7 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
     try {
       const where: any = {};
       if (req.query.status) where.status = req.query.status as string;
+      if (req.query.locationId) where.locationId = req.query.locationId as string;
       
       // Default to archived: false unless explicitly requested otherwise
       if (req.query.archived === 'true') {
