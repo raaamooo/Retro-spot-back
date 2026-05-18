@@ -26,6 +26,10 @@ exports.EVENTS = {
     ORDER_NEW: 'order:new',
     /** Emitted when any order's status changes (placed→barista→waiter→cashier→completed). */
     ORDER_STATUS_UPDATED: 'order:status_updated',
+    /** Emitted when an individual order item's status changes (ordered→preparing→ready→served). */
+    ORDER_ITEM_STATUS_UPDATED: 'order_item:status_updated',
+    /** Emitted when an order is flagged as rush priority. */
+    ORDER_RUSH_FLAGGED: 'order:rush_flagged',
     // ── Waiter Calls ──
     /** Emitted when a customer taps "Call Waiter" from the menu page. */
     WAITER_CALL_NEW: 'waiter_call:new',
@@ -38,6 +42,8 @@ exports.EVENTS = {
     INVENTORY_LOW_STOCK: 'inventory:low_stock',
     /** Emitted when menu item availability changes due to inventory. */
     MENU_AVAILABILITY: 'menu:availability',
+    /** Emitted when a stock change is logged (audit trail). */
+    STOCK_CHANGE_LOGGED: 'inventory:stock_change_logged',
     // ── Bookings ──
     /** Emitted when a customer submits a new booking. */
     BOOKING_NEW: 'booking:new',
@@ -51,6 +57,17 @@ exports.EVENTS = {
     // ── Accounting ──
     /** Emitted when a new accounting record is created. */
     ACCOUNTING_UPDATED: 'accounting:updated',
+    // ── System Configuration ──
+    /** Emitted when a system configuration value changes. */
+    CONFIG_UPDATED: 'config:updated',
+    // ── Shifts ──
+    /** Emitted when a staff member starts a shift. */
+    SHIFT_STARTED: 'shift:started',
+    /** Emitted when a staff member ends a shift. */
+    SHIFT_ENDED: 'shift:ended',
+    // ── Notifications ──
+    /** Generic notification for the notification feed. */
+    NOTIFICATION_NEW: 'notification:new',
 };
 // ─── SERVER-SIDE SOCKET CONNECTION HANDLER ─────────────────────
 /**
