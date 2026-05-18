@@ -3,7 +3,11 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Clearing existing locations...');
+  console.log('Clearing existing locations and related test data...');
+  await prisma.orderItem.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.waiterCall.deleteMany({});
+  await prisma.receiptGroup.deleteMany({});
   await prisma.location.deleteMany({});
 
   const newLocations = [
