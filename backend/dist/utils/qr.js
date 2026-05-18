@@ -18,11 +18,32 @@ async function generateLocationQR(locationId, baseUrl) {
                 light: '#FFFFFF' // White background
             }
         });
-        // Insert white badge and elegant brand text "Retrospot" in the center of 300x300 viewBox
+        // Dynamically extract the viewBox dimensions to scale logo overlay coordinates perfectly
+        const viewBoxMatch = svg.match(/viewBox="([^"]+)"/);
+        let viewWidth = 37;
+        let viewHeight = 37;
+        if (viewBoxMatch) {
+            const parts = viewBoxMatch[1].split(' ');
+            if (parts.length === 4) {
+                viewWidth = parseFloat(parts[2]);
+                viewHeight = parseFloat(parts[3]);
+            }
+        }
+        const centerX = viewWidth / 2;
+        const centerY = viewHeight / 2;
+        // Proportional dimensions based on the QR code coordinate space
+        const badgeWidth = viewWidth * 0.45;
+        const badgeHeight = viewHeight * 0.125;
+        const badgeX = centerX - (badgeWidth / 2);
+        const badgeY = centerY - (badgeHeight / 2);
+        const rx = badgeHeight * 0.15;
+        const strokeWidth = viewWidth * 0.008;
+        const fontSize = badgeHeight * 0.48;
+        const textY = centerY + (fontSize * 0.32); // Adjust text baseline to center perfectly
         const customElements = `
-  <!-- Logo/Text Badge -->
-  <rect x="80" y="132" width="140" height="36" rx="6" fill="#FFFFFF" stroke="#3D2010" stroke-width="2" />
-  <text x="150" y="156" font-family="'Cormorant Garamond', Georgia, serif" font-size="16" font-weight="bold" fill="#3D2010" text-anchor="middle" letter-spacing="1">Retrospot</text>
+  <!-- Logo/Text Badge dynamically scaled to grid -->
+  <rect x="${badgeX.toFixed(3)}" y="${badgeY.toFixed(3)}" width="${badgeWidth.toFixed(3)}" height="${badgeHeight.toFixed(3)}" rx="${rx.toFixed(3)}" fill="#FFFFFF" stroke="#3D2010" stroke-width="${strokeWidth.toFixed(3)}" />
+  <text x="${centerX.toFixed(3)}" y="${textY.toFixed(3)}" font-family="'Cormorant Garamond', Georgia, serif" font-size="${fontSize.toFixed(3)}" font-weight="bold" fill="#3D2010" text-anchor="middle" letter-spacing="0.1">Retrospot</text>
 </svg>`;
         const modifiedSvg = svg.replace('</svg>', customElements);
         // Convert to Base64 Data URL for universal <img> compatibility
