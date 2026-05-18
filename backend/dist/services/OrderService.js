@@ -98,5 +98,34 @@ class OrderService {
         this.io.emit(socketEvents_1.EVENTS.ORDER_STATUS_UPDATED, order);
         return order;
     }
+    async updateOrder(orderId, data) {
+        const order = await prisma.order.update({
+            where: { id: orderId },
+            data: {
+                customerName: data.customerName !== undefined ? data.customerName : undefined,
+                notes: data.notes !== undefined ? data.notes : undefined,
+                paymentMethod: data.paymentMethod !== undefined ? data.paymentMethod : undefined,
+                tipAmount: data.tipAmount !== undefined ? data.tipAmount : undefined,
+                subtotal: data.subtotal !== undefined ? data.subtotal : undefined,
+                total: data.total !== undefined ? data.total : undefined,
+                items: data.items ? {
+                    deleteMany: {},
+                    create: data.items.map((item) => ({
+                        menuItemId: item.menuItemId,
+                        quantity: item.quantity,
+                        additions: item.additions,
+                        itemPriceAtTime: item.itemPriceAtTime,
+                        notes: item.notes
+                    }))
+                } : undefined
+            },
+            include: {
+                items: { include: { menuItem: true } },
+                location: true
+            }
+        });
+        this.io.emit(socketEvents_1.EVENTS.ORDER_STATUS_UPDATED, order);
+        return order;
+    }
 }
 exports.OrderService = OrderService;

@@ -332,6 +332,15 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
     }
   });
 
+  router.patch('/orders/:id', async (req, res) => {
+    try {
+      const order = await orderService.updateOrder(req.params.id, req.body);
+      res.json(order);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update order' });
+    }
+  });
+
   router.get('/orders', async (req, res) => {
     try {
       const where: any = {};
