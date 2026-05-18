@@ -16,9 +16,13 @@ model User {
   phone        String?
   email        String?  @unique
   passwordHash String
+  pin          String?  // 4-digit manager override PIN
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  assignedOrders Order[]   @relation("AssignedWaiter")
+  shiftLogs      ShiftLog[]
 }
 
 // 2. Locations
@@ -75,14 +79,21 @@ model Addition {
 
 // 6. Ingredients
 model Ingredient {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   nameEn            String
   nameAr            String
-  unit              String   // liter, ml, gram, kg, piece
+  unit              String    // liter, ml, gram, kg, piece
   quantityAvailable Float
   lowStockThreshold Float
-  active            Boolean  @default(true)
+  costPerUnit       Float     @default(0)
+  category          String?   // dairy, beans, syrup, produce, dry-goods, packaging, etc.
+  expiryDate        DateTime?
+  supplierId        String?
+  active            Boolean   @default(true)
+
+  supplier          Supplier?        @relation(fields: [supplierId], references: [id])
   recipes           Recipe[]
+  stockChangeLogs   StockChangeLog[]
 }
 
 // 7. Item Ingredients Recipe
@@ -98,23 +109,33 @@ model Recipe {
 
 // 8. Orders
 model Order {
-  id            String   @id @default(uuid())
-  locationId    String
-  customerName  String?
-  notes         String?
-  paymentMethod String?  // cash, visa
-  tipAmount     Float    @default(0)
-  subtotal      Float    @default(0)
-  total         Float    @default(0)
-  status        String   @default("placed") // placed, barista, waiter, cashier, completed
-  archived      Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String   @id @default(uuid())
+  locationId      String
+  customerName    String?
+  notes           String?
+  paymentMethod   String?  // cash, visa, wallet, split
+  tipAmount       Float    @default(0)
+  subtotal        Float    @default(0)
+  taxAmount       Float    @default(0)
+  discountAmount  Float    @default(0)
+  serviceCharge   Float    @default(0)
+  total           Float    @default(0)
+  status          String   @default("placed") // placed, barista, waiter, cashier, completed
+  orderType       String   @default("dine_in") // dine_in, takeaway, delivery
+  priority        String   @default("normal") // normal, rush
+  archived        Boolean  @default(false)
+  refundAmount    Float    @default(0)
+  refundReason    String?
+  splitPayments   String?  // JSON: [{method, amount}]
+  assignedWaiterId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  location      Location @relation(fields: [locationId], references: [id])
-  items         OrderItem[]
-  receiptGroup  ReceiptGroup? @relation(fields: [receiptGroupId], references: [id])
-  receiptGroupId String?
+  location        Location  @relation(fields: [locationId], references: [id])
+  assignedWaiter  User?     @relation("AssignedWaiter", fields: [assignedWaiterId], references: [id])
+  items           OrderItem[]
+  receiptGroup    ReceiptGroup? @relation(fields: [receiptGroupId], references: [id])
+  receiptGroupId  String?
 }
 
 // 9. Order Items
@@ -126,6 +147,9 @@ model OrderItem {
   additions       String?  // JSON string
   itemPriceAtTime Float
   notes           String?
+  status          String   @default("ordered") // ordered, preparing, ready, served
+  voidReason      String?
+  voided          Boolean  @default(false)
 
   order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem        MenuItem @relation(fields: [menuItemId], references: [id])
@@ -228,4 +252,71 @@ model AccountingRecord {
   paymentMethod String
   relatedId     String?  // Reference ID of order, booking, or art
   createdAt     DateTime @default(now())
+}
+
+// 17. Suppliers
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  lastOrderDate DateTime?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  ingredients   Ingredient[]
+}
+
+// 18. Stock Change Log (Audit Trail)
+model StockChangeLog {
+  id            String   @id @default(uuid())
+  ingredientId  String
+  previousQty   Float
+  newQty        Float
+  reason        String   // sale, manual_adjustment, waste, restock, void
+  staffName     String
+  details       String?  // additional context
+  createdAt     DateTime @default(now())
+
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
+}
+
+// 19. System Configuration
+model SystemConfig {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+  label String? // human-readable label
+}
+
+// 20. Loyalty Accounts
+model LoyaltyAccount {
+  id            String   @id @default(uuid())
+  phoneNumber   String   @unique
+  customerName  String?
+  pointsBalance Float    @default(0)
+  totalEarned   Float    @default(0)
+  totalRedeemed Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// 21. Shift Logs
+model ShiftLog {
+  id            String    @id @default(uuid())
+  userId        String
+  startTime     DateTime  @default(now())
+  endTime       DateTime?
+  expectedCash  Float     @default(0)
+  countedCash   Float     @default(0)
+  discrepancy   Float     @default(0)
+  totalRevenue  Float     @default(0)
+  totalOrders   Int       @default(0)
+  totalVoids    Int       @default(0)
+  totalTips     Float     @default(0)
+  notes         String?
+
+  user          User      @relation(fields: [userId], references: [id])
 }

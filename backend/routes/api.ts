@@ -4,6 +4,8 @@ import { PrismaClient } from '@prisma/client';
 import { OrderService } from '../services/OrderService';
 import { InventoryService } from '../services/InventoryService';
 import { BookingService } from '../services/BookingService';
+import { ConfigService } from '../services/ConfigService';
+import { AuditService } from '../services/AuditService';
 import { generateLocationQR } from '../utils/qr';
 import { generateReceiptPDF, generateBookingPDF, generateArtBidPDF } from '../utils/pdf';
 import { EVENTS } from '../socketEvents';
@@ -13,9 +15,14 @@ import path from 'path';
 
 export default function apiRoutes(io: Server, prisma: PrismaClient) {
   const router = Router();
-  const inventoryService = new InventoryService(io);
-  const orderService = new OrderService(io, inventoryService);
+  const auditService = new AuditService(io);
+  const configService = new ConfigService(io);
+  const inventoryService = new InventoryService(io, auditService);
+  const orderService = new OrderService(io, inventoryService, configService);
   const bookingService = new BookingService(io);
+
+  // Seed default config values on startup
+  configService.seedDefaults().catch(err => console.error('[ConfigService] Failed to seed defaults:', err));
 
   // Configure Multer for local storage
   const storage = multer.diskStorage({
@@ -60,14 +67,78 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
    */
   router.patch('/ingredients/:id', async (req, res) => {
     try {
-      const { quantityAvailable } = req.body;
+      const { quantityAvailable, reason, staffName, details } = req.body;
       if (quantityAvailable === undefined || isNaN(Number(quantityAvailable))) {
         return res.status(400).json({ error: 'quantityAvailable must be a number' });
       }
-      const ingredient = await inventoryService.updateStock(req.params.id, Number(quantityAvailable));
+      const ingredient = await inventoryService.updateStock(
+        req.params.id,
+        Number(quantityAvailable),
+        reason || 'manual_adjustment',
+        staffName || 'Staff',
+        details
+      );
       res.json(ingredient);
     } catch (err) {
       res.status(500).json({ error: 'Failed to update ingredient' });
+    }
+  });
+
+  /**
+   * POST /api/ingredients/batch-restock
+   * Batch restock multiple ingredients.
+   */
+  router.post('/ingredients/batch-restock', async (req, res) => {
+    try {
+      const { items, staffName } = req.body;
+      if (!items || !Array.isArray(items)) {
+        return res.status(400).json({ error: 'items array is required' });
+      }
+      const results = await inventoryService.batchRestock(items, staffName || 'Staff');
+      res.json(results);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to batch restock' });
+    }
+  });
+
+  /**
+   * GET /api/inventory/health
+   * Get inventory health dashboard data.
+   */
+  router.get('/inventory/health', async (req, res) => {
+    try {
+      const health = await inventoryService.getInventoryHealth();
+      res.json(health);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch inventory health' });
+    }
+  });
+
+  /**
+   * GET /api/inventory/logs
+   * Get stock change audit trail.
+   */
+  router.get('/inventory/logs', async (req, res) => {
+    try {
+      const ingredientId = req.query.ingredientId as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await auditService.getStockChangeLogs(ingredientId, limit);
+      res.json(logs);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch inventory logs' });
+    }
+  });
+
+  /**
+   * GET /api/inventory/export
+   * Export full inventory data.
+   */
+  router.get('/inventory/export', async (req, res) => {
+    try {
+      const data = await inventoryService.exportInventory();
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to export inventory' });
     }
   });
 
@@ -368,6 +439,124 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
       res.json(orders);
     } catch (err) {
       res.status(500).json({ error: 'Failed to fetch orders' });
+    }
+  });
+
+  /**
+   * GET /api/orders/snapshot
+   * Get daily sales snapshot for the cashier shift.
+   */
+  router.get('/orders/snapshot', async (req, res) => {
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const orders = await prisma.order.findMany({
+        where: {
+          createdAt: { gte: startOfDay },
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      const snapshot = {
+        grossSales: 0,
+        netSales: 0,
+        cashSales: 0,
+        visaSales: 0,
+        totalTips: 0,
+        totalVoids: 0,
+        completedOrders: 0,
+        pendingOrders: 0,
+      };
+
+      orders.forEach(order => {
+        if (order.status === 'completed') {
+          snapshot.completedOrders++;
+          snapshot.grossSales += order.total + (order.refundAmount || 0); // Total before refund
+          snapshot.netSales += order.total;
+          snapshot.totalTips += order.tipAmount || 0;
+
+          if (order.paymentMethod === 'cash') snapshot.cashSales += order.total;
+          if (order.paymentMethod === 'visa') snapshot.visaSales += order.total;
+          if (order.paymentMethod === 'split') {
+            // Best effort approximation if split amounts are not structured
+            snapshot.cashSales += order.total / 2;
+            snapshot.visaSales += order.total / 2;
+          }
+        } else if (order.status !== 'cancelled' && !order.archived) {
+          snapshot.pendingOrders++;
+        }
+
+        // Count voids
+        order.items.forEach(item => {
+          if (item.voided) {
+            snapshot.totalVoids += item.itemPriceAtTime * item.quantity;
+          }
+        });
+      });
+
+      res.json(snapshot);
+    } catch (err) {
+      console.error('/api/orders/snapshot error:', err);
+      res.status(500).json({ error: 'Failed to fetch shift snapshot' });
+    }
+  });
+
+  /**
+   * PATCH /api/order-items/:id/status
+   * Update individual order item status (ordered → preparing → ready → served).
+   */
+  router.patch('/order-items/:id/status', async (req, res) => {
+    try {
+      const item = await orderService.updateItemStatus(req.params.id, req.body.status);
+      res.json(item);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update item status' });
+    }
+  });
+
+  /**
+   * POST /api/orders/:id/void-item
+   * Void a specific item in an order.
+   */
+  router.post('/orders/:id/void-item', async (req, res) => {
+    try {
+      const { itemId, reason, staffName } = req.body;
+      if (!itemId || !reason) return res.status(400).json({ error: 'itemId and reason are required' });
+      const result = await orderService.voidItem(req.params.id, itemId, reason, staffName || 'Staff');
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to void item' });
+    }
+  });
+
+  /**
+   * POST /api/orders/:id/refund
+   * Process a partial or full refund.
+   */
+  router.post('/orders/:id/refund', async (req, res) => {
+    try {
+      const { amount, reason } = req.body;
+      if (!amount || !reason) return res.status(400).json({ error: 'amount and reason are required' });
+      const order = await orderService.refundOrder(req.params.id, parseFloat(amount), reason);
+      res.json(order);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to process refund' });
+    }
+  });
+
+  /**
+   * PATCH /api/orders/:id/rush
+   * Flag an order as rush priority.
+   */
+  router.patch('/orders/:id/rush', async (req, res) => {
+    try {
+      const order = await orderService.setRushPriority(req.params.id);
+      res.json(order);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to set rush priority' });
     }
   });
 
@@ -703,6 +892,298 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to delete worker' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  //  SUPPLIERS
+  // ═══════════════════════════════════════════════════════════
+
+  router.get('/suppliers', async (req, res) => {
+    try {
+      const suppliers = await prisma.supplier.findMany({
+        where: { active: true },
+        orderBy: { name: 'asc' },
+      });
+      res.json(suppliers);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch suppliers' });
+    }
+  });
+
+  router.post('/suppliers', async (req, res) => {
+    try {
+      const { name, contactPerson, email, phone, address } = req.body;
+      if (!name) return res.status(400).json({ error: 'name is required' });
+      const supplier = await prisma.supplier.create({
+        data: { name, contactPerson, email, phone, address },
+      });
+      res.json(supplier);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to create supplier' });
+    }
+  });
+
+  router.patch('/suppliers/:id', async (req, res) => {
+    try {
+      const { name, contactPerson, email, phone, address, active } = req.body;
+      const data: any = {};
+      if (name !== undefined) data.name = name;
+      if (contactPerson !== undefined) data.contactPerson = contactPerson;
+      if (email !== undefined) data.email = email;
+      if (phone !== undefined) data.phone = phone;
+      if (address !== undefined) data.address = address;
+      if (active !== undefined) data.active = active;
+      const supplier = await prisma.supplier.update({ where: { id: req.params.id }, data });
+      res.json(supplier);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update supplier' });
+    }
+  });
+
+  router.delete('/suppliers/:id', async (req, res) => {
+    try {
+      await prisma.supplier.update({ where: { id: req.params.id }, data: { active: false } });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete supplier' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  //  SYSTEM CONFIGURATION
+  // ═══════════════════════════════════════════════════════════
+
+  router.get('/config', async (req, res) => {
+    try {
+      const configs = await configService.getAllConfigs();
+      res.json(configs);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch config' });
+    }
+  });
+
+  router.post('/config', async (req, res) => {
+    try {
+      const { key, value } = req.body;
+      if (!key || value === undefined) return res.status(400).json({ error: 'key and value are required' });
+      const config = await configService.setConfig(key, String(value));
+      res.json(config);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update config' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  //  SHIFT LOGS
+  // ═══════════════════════════════════════════════════════════
+
+  router.get('/shifts', async (req, res) => {
+    try {
+      const shifts = await prisma.shiftLog.findMany({
+        include: { user: { select: { name: true, role: true } } },
+        orderBy: { startTime: 'desc' },
+        take: 50,
+      });
+      res.json(shifts);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch shifts' });
+    }
+  });
+
+  router.post('/shifts/start', async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ error: 'userId is required' });
+      const shift = await prisma.shiftLog.create({
+        data: { userId },
+        include: { user: { select: { name: true, role: true } } },
+      });
+      io.emit(EVENTS.SHIFT_STARTED, shift);
+      res.json(shift);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to start shift' });
+    }
+  });
+
+  router.patch('/shifts/:id/end', async (req, res) => {
+    try {
+      const { countedCash, notes } = req.body;
+      // Calculate shift stats
+      const shift = await prisma.shiftLog.findUnique({ where: { id: req.params.id } });
+      if (!shift) return res.status(404).json({ error: 'Shift not found' });
+
+      const ordersInShift = await prisma.order.findMany({
+        where: {
+          status: 'completed',
+          createdAt: { gte: shift.startTime },
+        },
+      });
+
+      const totalRevenue = ordersInShift.reduce((sum, o) => sum + o.total, 0);
+      const totalTips = ordersInShift.reduce((sum, o) => sum + o.tipAmount, 0);
+      const cashOrders = ordersInShift.filter(o => o.paymentMethod === 'cash');
+      const expectedCash = cashOrders.reduce((sum, o) => sum + o.total, 0);
+      const counted = parseFloat(countedCash) || 0;
+
+      const updatedShift = await prisma.shiftLog.update({
+        where: { id: req.params.id },
+        data: {
+          endTime: new Date(),
+          expectedCash,
+          countedCash: counted,
+          discrepancy: counted - expectedCash,
+          totalRevenue,
+          totalOrders: ordersInShift.length,
+          totalTips,
+          notes: notes || null,
+        },
+        include: { user: { select: { name: true, role: true } } },
+      });
+
+      io.emit(EVENTS.SHIFT_ENDED, updatedShift);
+      res.json(updatedShift);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to end shift' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  //  ANALYTICS
+  // ═══════════════════════════════════════════════════════════
+
+  router.get('/analytics/sales', async (req, res) => {
+    try {
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      const data = await orderService.getSalesBreakdown(startDate, endDate);
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch sales analytics' });
+    }
+  });
+
+  router.get('/analytics/waste', async (req, res) => {
+    try {
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setHours(0, 0, 0, 0));
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      const data = await orderService.getWasteReport(startDate, endDate);
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch waste report' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  //  AUTH (Staff Login)
+  // ═══════════════════════════════════════════════════════════
+
+  router.post('/auth/login', async (req, res) => {
+    try {
+      const bcrypt = await import('bcryptjs');
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
+
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+
+      // Return user info (no JWT — session managed client-side for simplicity)
+      res.json({
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        email: user.email,
+        phone: user.phone,
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  /**
+   * POST /api/auth/verify-pin
+   * Verify a manager's 4-digit PIN for override actions.
+   */
+  router.post('/auth/verify-pin', async (req, res) => {
+    try {
+      const { userId, pin } = req.body;
+      if (!userId || !pin) return res.status(400).json({ error: 'userId and pin are required' });
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || user.role !== 'manager') return res.status(403).json({ error: 'Not authorized' });
+      if (user.pin !== pin) return res.status(401).json({ error: 'Invalid PIN' });
+
+      res.json({ valid: true });
+    } catch (err) {
+      res.status(500).json({ error: 'PIN verification failed' });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  //  LOYALTY
+  // ═══════════════════════════════════════════════════════════
+
+  router.get('/loyalty/:phone', async (req, res) => {
+    try {
+      let account = await prisma.loyaltyAccount.findUnique({
+        where: { phoneNumber: req.params.phone },
+      });
+      if (!account) {
+        account = await prisma.loyaltyAccount.create({
+          data: { phoneNumber: req.params.phone },
+        });
+      }
+      res.json(account);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch loyalty account' });
+    }
+  });
+
+  router.post('/loyalty/:phone/earn', async (req, res) => {
+    try {
+      const { points, customerName } = req.body;
+      const account = await prisma.loyaltyAccount.upsert({
+        where: { phoneNumber: req.params.phone },
+        update: {
+          pointsBalance: { increment: points },
+          totalEarned: { increment: points },
+          customerName: customerName || undefined,
+        },
+        create: {
+          phoneNumber: req.params.phone,
+          pointsBalance: points,
+          totalEarned: points,
+          customerName: customerName || null,
+        },
+      });
+      res.json(account);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to add loyalty points' });
+    }
+  });
+
+  router.post('/loyalty/:phone/redeem', async (req, res) => {
+    try {
+      const { points } = req.body;
+      const account = await prisma.loyaltyAccount.findUnique({
+        where: { phoneNumber: req.params.phone },
+      });
+      if (!account || account.pointsBalance < points) {
+        return res.status(400).json({ error: 'Insufficient points' });
+      }
+      const updated = await prisma.loyaltyAccount.update({
+        where: { phoneNumber: req.params.phone },
+        data: {
+          pointsBalance: { decrement: points },
+          totalRedeemed: { increment: points },
+        },
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to redeem loyalty points' });
     }
   });
 

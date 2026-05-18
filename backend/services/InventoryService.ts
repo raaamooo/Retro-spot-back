@@ -1,25 +1,48 @@
 import { PrismaClient } from '@prisma/client';
 import { Server } from 'socket.io';
 import { EVENTS } from '../socketEvents';
+import { AuditService } from './AuditService';
 
 const prisma = new PrismaClient();
 
 export class InventoryService {
   private io: Server;
+  private auditService: AuditService;
 
-  constructor(io: Server) {
+  constructor(io: Server, auditService?: AuditService) {
     this.io = io;
+    this.auditService = auditService || new AuditService(io);
   }
 
   /**
    * Manually update stock for an ingredient (used by inventory worker).
    * Recalculates menu item availability and emits all relevant events.
    */
-  async updateStock(ingredientId: string, newQuantity: number) {
+  async updateStock(
+    ingredientId: string,
+    newQuantity: number,
+    reason: string = 'manual_adjustment',
+    staffName: string = 'System',
+    details?: string
+  ) {
+    // Get current value for audit log
+    const current = await prisma.ingredient.findUnique({ where: { id: ingredientId } });
+    if (!current) throw new Error('Ingredient not found');
+
     const updatedIngredient = await prisma.ingredient.update({
       where: { id: ingredientId },
       data: { quantityAvailable: newQuantity },
     });
+
+    // Log the change
+    await this.auditService.logStockChange(
+      ingredientId,
+      current.quantityAvailable,
+      newQuantity,
+      reason,
+      staffName,
+      details
+    );
 
     // Check low stock threshold
     if (updatedIngredient.quantityAvailable > 0 && updatedIngredient.quantityAvailable <= updatedIngredient.lowStockThreshold) {
@@ -38,6 +61,85 @@ export class InventoryService {
     await this.emitFullUpdate();
 
     return updatedIngredient;
+  }
+
+  /**
+   * Batch restock multiple ingredients at once.
+   */
+  async batchRestock(
+    items: { id: string; quantity: number }[],
+    staffName: string = 'System'
+  ) {
+    const results = [];
+
+    for (const item of items) {
+      const current = await prisma.ingredient.findUnique({ where: { id: item.id } });
+      if (!current) continue;
+
+      const newQty = current.quantityAvailable + item.quantity;
+      const updated = await prisma.ingredient.update({
+        where: { id: item.id },
+        data: { quantityAvailable: newQty },
+      });
+
+      await this.auditService.logStockChange(
+        item.id,
+        current.quantityAvailable,
+        newQty,
+        'restock',
+        staffName,
+        `Batch restock: +${item.quantity} ${current.unit}`
+      );
+
+      // Re-enable menu items if ingredient is now in stock
+      if (updated.quantityAvailable > 0) {
+        await this.reenableMenuItemsUsingIngredient(updated.id);
+      }
+
+      results.push(updated);
+    }
+
+    await this.emitFullUpdate();
+    return results;
+  }
+
+  /**
+   * Get inventory health summary.
+   */
+  async getInventoryHealth() {
+    const ingredients = await prisma.ingredient.findMany({ where: { active: true } });
+
+    const now = new Date();
+    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const totalSKUs = ingredients.length;
+    const belowThreshold = ingredients.filter(i => i.quantityAvailable > 0 && i.quantityAvailable <= i.lowStockThreshold).length;
+    const outOfStock = ingredients.filter(i => i.quantityAvailable <= 0).length;
+    const expiringThisWeek = ingredients.filter(i =>
+      i.expiryDate && new Date(i.expiryDate) >= now && new Date(i.expiryDate) <= oneWeekFromNow
+    ).length;
+    const estimatedValue = ingredients.reduce((sum, i) => sum + (i.quantityAvailable * i.costPerUnit), 0);
+
+    return {
+      totalSKUs,
+      belowThreshold,
+      outOfStock,
+      expiringThisWeek,
+      estimatedValue: Math.round(estimatedValue * 100) / 100,
+    };
+  }
+
+  /**
+   * Export inventory data as JSON (frontend will convert to CSV if needed).
+   */
+  async exportInventory() {
+    return prisma.ingredient.findMany({
+      where: { active: true },
+      include: {
+        supplier: { select: { name: true, phone: true, email: true } },
+      },
+      orderBy: { nameEn: 'asc' },
+    });
   }
 
   /**
@@ -64,12 +166,26 @@ export class InventoryService {
       for (const orderItem of order.items) {
         for (const recipe of orderItem.menuItem.recipes) {
           const totalUsed = recipe.quantityUsed * orderItem.quantity;
-          
+
+          const current = await prisma.ingredient.findUnique({ where: { id: recipe.ingredientId } });
+
           // Decrement ingredient
           const updatedIngredient = await prisma.ingredient.update({
             where: { id: recipe.ingredientId },
             data: { quantityAvailable: { decrement: totalUsed } }
           });
+
+          // Log the depletion
+          if (current) {
+            await this.auditService.logStockChange(
+              recipe.ingredientId,
+              current.quantityAvailable,
+              updatedIngredient.quantityAvailable,
+              'sale',
+              'System',
+              `Order ${orderId.slice(0, 8)}: ${orderItem.quantity}x ${orderItem.menuItem.nameEn}`
+            );
+          }
 
           // Check thresholds
           if (updatedIngredient.quantityAvailable > 0 && updatedIngredient.quantityAvailable <= updatedIngredient.lowStockThreshold) {
