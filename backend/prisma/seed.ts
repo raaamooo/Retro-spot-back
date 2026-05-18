@@ -22,12 +22,20 @@ async function main() {
   // 2. Locations - Check if they exist to avoid duplicates
   const locationsCount = await prisma.location.count();
   if (locationsCount === 0) {
-    const table1 = await prisma.location.create({
-      data: { name: 'Table 1', type: 'table' },
-    });
-    const room1 = await prisma.location.create({
-      data: { name: 'Workspace Room A', type: 'room' },
-    });
+    const newLocations = [
+      { name: 'Table 1', type: 'table' },
+      { name: 'Table 2', type: 'table' },
+      { name: 'Table 3', type: 'table' },
+      { name: 'Table 4', type: 'table' },
+      { name: 'Table 5', type: 'table' },
+      { name: 'Table 6', type: 'table' },
+      { name: 'Room', type: 'room' },
+      { name: 'Outdoor 1', type: 'table' },
+      { name: 'Outdoor 2', type: 'table' },
+    ];
+    for (const loc of newLocations) {
+      await prisma.location.create({ data: loc });
+    }
     console.log('Locations created');
   }
 
