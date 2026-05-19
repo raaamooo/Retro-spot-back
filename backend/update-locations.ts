@@ -43,8 +43,7 @@ const CATEGORIES_TO_ENSURE: CategoryData[] = [
   { nameEn: 'Milk-Based — Everyday', nameAr: 'مشروبات الحليب اليومية', sortOrder: 4 },
   { nameEn: 'Specialty & Signature', nameAr: 'مشروبات سبيشالتي المتميزة', sortOrder: 5 },
   { nameEn: 'Filter & Pour-Over', nameAr: 'قهوة مقطرة ومفلترة', sortOrder: 6 },
-  { nameEn: 'Blended & Frozen', nameAr: 'مشروبات مثلجة ومخلوطة', sortOrder: 7 },
-  { nameEn: 'Traditional Egyptian', nameAr: 'قهوة مصرية تقليدية', sortOrder: 8 }
+  { nameEn: 'Traditional Egyptian', nameAr: 'قهوة مصرية تقليدية', sortOrder: 7 }
 ];
 
 const ITEMS_TO_ADD: MenuItemData[] = [
@@ -223,43 +222,6 @@ const ITEMS_TO_ADD: MenuItemData[] = [
     tags: 'iced',
     price: 100
   },
-  // Blended & Frozen
-  {
-    nameEn: 'Frappé',
-    nameAr: 'فرابيه',
-    descriptionEn: 'Blended iced coffee with milk and foam',
-    descriptionAr: 'قهوة مثلجة مخفوقة ومخلوطة مع الحليب والرغوة الغنية',
-    categoryName: 'Blended & Frozen',
-    tags: 'iced',
-    price: 70
-  },
-  {
-    nameEn: 'Mocha Frappé',
-    nameAr: 'موكا فرابيه',
-    descriptionEn: 'Blended chocolate-espresso with whipped cream',
-    descriptionAr: 'شوكولاتة ممزوجة مع الإسبريسو والثلج والكريمة المخفوقة',
-    categoryName: 'Blended & Frozen',
-    tags: 'iced',
-    price: 80
-  },
-  {
-    nameEn: 'White Mocha Frappé',
-    nameAr: 'وايت موكا فرابيه',
-    descriptionEn: 'White chocolate blended with espresso and ice',
-    descriptionAr: 'شوكولاتة بيضاء ممزوجة مع الإسبريسو والثلج',
-    categoryName: 'Blended & Frozen',
-    tags: 'iced',
-    price: 90
-  },
-  {
-    nameEn: 'Caramel Frappuccino',
-    nameAr: 'كراميل فرابوتشينو',
-    descriptionEn: 'Blended caramel, espresso, milk and ice',
-    descriptionAr: 'كراميل غني ممزوج مع الإسبريسو والحليب والثلج',
-    categoryName: 'Blended & Frozen',
-    tags: 'iced',
-    price: 130
-  },
   // Traditional Egyptian
   {
     nameEn: 'Ahwa (Turkish Coffee)',
@@ -305,6 +267,21 @@ async function main() {
     });
   }
   console.log('Successfully updated locations!');
+
+  // Explicitly remove "Blended & Frozen" category and its items if they exist
+  const catToDelete = await prisma.menuCategory.findFirst({
+    where: { nameEn: { equals: 'Blended & Frozen', mode: 'insensitive' } }
+  });
+  if (catToDelete) {
+    console.log(`Found category "${catToDelete.nameEn}" to delete. Cleaning up items first...`);
+    await prisma.menuItem.deleteMany({
+      where: { categoryId: catToDelete.id }
+    });
+    await prisma.menuCategory.delete({
+      where: { id: catToDelete.id }
+    });
+    console.log('Successfully deleted Blended & Frozen category and items.');
+  }
 
   console.log('Ensuring categories exist...');
   const categoryMap: Record<string, string> = {};
