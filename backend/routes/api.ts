@@ -62,6 +62,34 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
   });
 
   /**
+   * POST /api/ingredients
+   * Create a new ingredient.
+   */
+  router.post('/ingredients', async (req, res) => {
+    try {
+      const { nameEn, nameAr, unit, quantityAvailable, lowStockThreshold, costPerUnit, supplierId } = req.body;
+      if (!nameEn || !nameAr || !unit) {
+        return res.status(400).json({ error: 'nameEn, nameAr, and unit are required' });
+      }
+      
+      const ingredient = await prisma.ingredient.create({
+        data: {
+          nameEn,
+          nameAr,
+          unit,
+          quantityAvailable: Number(quantityAvailable) || 0,
+          lowStockThreshold: Number(lowStockThreshold) || 10,
+          costPerUnit: Number(costPerUnit) || 0,
+          supplierId: supplierId || null,
+        }
+      });
+      res.json(ingredient);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to create ingredient' });
+    }
+  });
+
+  /**
    * PATCH /api/ingredients/:id
    * Manual stock adjustment by inventory worker.
    */
