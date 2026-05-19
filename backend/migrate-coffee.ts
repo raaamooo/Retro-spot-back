@@ -104,3 +104,16 @@ export async function runCoffeeMigration(prisma: PrismaClient) {
 
   console.log('Migration completed successfully!');
 }
+
+// Allow direct execution via CLI
+if (require.main === module) {
+  const prisma = new PrismaClient();
+  runCoffeeMigration(prisma)
+    .catch(e => {
+      console.error('Migration failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
