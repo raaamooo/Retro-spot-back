@@ -4,7 +4,7 @@ buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npm start"
-preDeployCommand = "npx prisma db push --accept-data-loss && npx tsx update-locations.ts"
+preDeployCommand = "npx prisma db push --accept-data-loss && npx tsx update-locations.ts && npx tsx migrate-coffee.ts"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

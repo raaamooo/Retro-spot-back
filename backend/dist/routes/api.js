@@ -46,6 +46,7 @@ const AuditService_1 = require("../services/AuditService");
 const qr_1 = require("../utils/qr");
 const pdf_1 = require("../utils/pdf");
 const socketEvents_1 = require("../socketEvents");
+const migrate_coffee_1 = require("../migrate-coffee");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 function apiRoutes(io, prisma) {
@@ -66,6 +67,19 @@ function apiRoutes(io, prisma) {
         },
     });
     const upload = (0, multer_1.default)({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5 MB cap
+    // ═══════════════════════════════════════════════════════════
+    //  MIGRATION
+    // ═══════════════════════════════════════════════════════════
+    router.get('/run-migration', async (req, res) => {
+        try {
+            await (0, migrate_coffee_1.runCoffeeMigration)(prisma);
+            res.json({ success: true, message: 'Migration completed' });
+        }
+        catch (err) {
+            console.error(err);
+            res.status(500).json({ error: err.message || 'Migration failed' });
+        }
+    });
     // ═══════════════════════════════════════════════════════════
     //  MENU & CATEGORIES
     // ═══════════════════════════════════════════════════════════
