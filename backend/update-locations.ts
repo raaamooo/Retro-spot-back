@@ -37,13 +37,12 @@ const LOCATIONS_TO_CREATE: LocationData[] = [
 ];
 
 const CATEGORIES_TO_ENSURE: CategoryData[] = [
-  { nameEn: 'Coffee', nameAr: 'قهوة', sortOrder: 1 },
-  { nameEn: 'Pastries', nameAr: 'معجنات', sortOrder: 2 },
-  { nameEn: 'Espresso-Based — Classics', nameAr: 'كلاسيكيات الإسبريسو', sortOrder: 3 },
-  { nameEn: 'Milk-Based — Everyday', nameAr: 'مشروبات الحليب اليومية', sortOrder: 4 },
-  { nameEn: 'Specialty & Signature', nameAr: 'مشروبات سبيشالتي المتميزة', sortOrder: 5 },
-  { nameEn: 'Filter & Pour-Over', nameAr: 'قهوة مقطرة ومفلترة', sortOrder: 6 },
-  { nameEn: 'Traditional Egyptian', nameAr: 'قهوة مصرية تقليدية', sortOrder: 7 }
+  { nameEn: 'Pastries', nameAr: 'معجنات', sortOrder: 1 },
+  { nameEn: 'Espresso-Based — Classics', nameAr: 'كلاسيكيات الإسبريسو', sortOrder: 2 },
+  { nameEn: 'Milk-Based — Everyday', nameAr: 'مشروبات الحليب اليومية', sortOrder: 3 },
+  { nameEn: 'Specialty & Signature', nameAr: 'مشروبات سبيشالتي المتميزة', sortOrder: 4 },
+  { nameEn: 'Filter & Pour-Over', nameAr: 'قهوة مقطرة ومفلترة', sortOrder: 5 },
+  { nameEn: 'Traditional Egyptian', nameAr: 'قهوة مصرية تقليدية', sortOrder: 6 }
 ];
 
 const ITEMS_TO_ADD: MenuItemData[] = [
@@ -273,14 +272,45 @@ async function main() {
     where: { nameEn: { equals: 'Blended & Frozen', mode: 'insensitive' } }
   });
   if (catToDelete) {
-    console.log(`Found category "${catToDelete.nameEn}" to delete. Cleaning up items first...`);
+    console.log(`Found category "${catToDelete.nameEn}" to delete. Cleaning up recipes and items...`);
+    const itemsToDelete = await prisma.menuItem.findMany({
+      where: { categoryId: catToDelete.id },
+      select: { id: true }
+    });
+    const itemIds = itemsToDelete.map(item => item.id);
+    await prisma.recipe.deleteMany({
+      where: { menuItemId: { in: itemIds } }
+    });
     await prisma.menuItem.deleteMany({
       where: { categoryId: catToDelete.id }
     });
     await prisma.menuCategory.delete({
       where: { id: catToDelete.id }
     });
-    console.log('Successfully deleted Blended & Frozen category and items.');
+    console.log('Successfully deleted Blended & Frozen category, recipes, and items.');
+  }
+
+  // Explicitly remove "Coffee" category and its items if they exist
+  const coffeeCategories = await prisma.menuCategory.findMany({
+    where: { nameEn: { equals: 'Coffee', mode: 'insensitive' } }
+  });
+  for (const coffeeCat of coffeeCategories) {
+    console.log(`Found old category "${coffeeCat.nameEn}" to delete. Cleaning up recipes and items...`);
+    const itemsToDelete = await prisma.menuItem.findMany({
+      where: { categoryId: coffeeCat.id },
+      select: { id: true }
+    });
+    const itemIds = itemsToDelete.map(item => item.id);
+    await prisma.recipe.deleteMany({
+      where: { menuItemId: { in: itemIds } }
+    });
+    await prisma.menuItem.deleteMany({
+      where: { categoryId: coffeeCat.id }
+    });
+    await prisma.menuCategory.delete({
+      where: { id: coffeeCat.id }
+    });
+    console.log(`Successfully deleted category "${coffeeCat.nameEn}", recipes, and items.`);
   }
 
   console.log('Ensuring categories exist...');
