@@ -9,6 +9,7 @@ import { AuditService } from '../services/AuditService';
 import { generateLocationQR } from '../utils/qr';
 import { generateReceiptPDF, generateBookingPDF, generateArtBidPDF } from '../utils/pdf';
 import { EVENTS } from '../socketEvents';
+import { runCoffeeMigration } from '../migrate-coffee';
 
 import multer from 'multer';
 import path from 'path';
@@ -33,6 +34,19 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
     },
   });
   const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5 MB cap
+
+  // ═══════════════════════════════════════════════════════════
+  //  MIGRATION
+  // ═══════════════════════════════════════════════════════════
+  router.get('/run-migration', async (req, res) => {
+    try {
+      await runCoffeeMigration(prisma);
+      res.json({ success: true, message: 'Migration completed' });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message || 'Migration failed' });
+    }
+  });
 
   // ═══════════════════════════════════════════════════════════
   //  MENU & CATEGORIES

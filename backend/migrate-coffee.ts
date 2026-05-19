@@ -1,8 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
-
-async function main() {
+export async function runCoffeeMigration(prisma: PrismaClient) {
   console.log('Starting Coffee Category Migration...');
 
   // 1. Find or create the new categories
@@ -106,12 +104,3 @@ async function main() {
 
   console.log('Migration completed successfully!');
 }
-
-main()
-  .catch(e => {
-    console.error('Migration failed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
