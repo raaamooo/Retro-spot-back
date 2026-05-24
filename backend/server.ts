@@ -15,13 +15,14 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://retro-spot-front-production.up.railway.app';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://retro-spot-front.vercel.app';
 
 // Accept any origin that is localhost, the configured FRONTEND_URL,
 // or any Cloudflare quick-tunnel subdomain (*.trycloudflare.com)
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true; // same-origin / non-browser requests
   if (origin === FRONTEND_URL) return true;
+  if (origin === 'https://retro-spot-front.vercel.app') return true;
   if (origin === 'https://retro-spot-front-production.up.railway.app') return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin)) return true;
@@ -95,6 +96,16 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── Socket.IO handlers ────────────────────────────────────────────
 registerSocketHandlers(io, prisma);
+
+// ── QR redirect route ─────────────────────────────────────────────
+app.get('/go', (req, res) => {
+  const locationId = req.query.locationId as string;
+  if (!locationId) {
+    return res.status(400).json({ error: 'locationId query parameter is required' });
+  }
+  const target = `${FRONTEND_URL}/menu?locationId=${locationId}`;
+  res.redirect(301, target);
+});
 
 // ── API routes ────────────────────────────────────────────────────
 import apiRoutes from './routes/api';
