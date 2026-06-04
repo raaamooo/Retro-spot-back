@@ -17,13 +17,15 @@ const configManager_1 = require("./configManager");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://retro-spot-front-production.up.railway.app';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://retrospot.up.railway.app';
 // Accept any origin that is localhost, the configured FRONTEND_URL,
 // or any Cloudflare quick-tunnel subdomain (*.trycloudflare.com)
 const isAllowedOrigin = (origin) => {
     if (!origin)
         return true; // same-origin / non-browser requests
     if (origin === FRONTEND_URL)
+        return true;
+    if (origin === 'https://retrospot.up.railway.app')
         return true;
     if (origin === 'https://retro-spot-front-production.up.railway.app')
         return true;
