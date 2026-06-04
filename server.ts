@@ -117,7 +117,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // ── Start ─────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
-httpServer.listen(PORT, '0.0.0.0', () => {
+httpServer.listen(PORT, () => {
   console.log(`✅ Retro Spot API running on port ${PORT}`);
   console.log(`   Frontend URL: ${FRONTEND_URL}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
