@@ -31,8 +31,6 @@ const isAllowedOrigin = (origin) => {
         return true;
     if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin))
         return true;
-    if (origin.endsWith('.up.railway.app'))
-        return true;
     return false;
 };
 const corsOptions = {
