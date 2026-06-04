@@ -117,11 +117,15 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // ── Start ─────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Retro Spot API running on port ${PORT}`);
   console.log(`   Frontend URL: ${FRONTEND_URL}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// Fix 502 Bad Gateway errors by matching proxy keep-alive timeouts
+httpServer.keepAliveTimeout = 65000;
+httpServer.headersTimeout = 66000;
 
 // ── Keep Prisma connection alive (Railway idles after ~5 min) ─────
 setInterval(async () => {
