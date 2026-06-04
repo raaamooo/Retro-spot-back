@@ -11,6 +11,14 @@ import { getConfig, updateConfig } from './configManager';
 
 dotenv.config();
 
+// ── Crash handlers — prevent silent exits on Railway ──────────
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled Rejection:', reason);
+});
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -114,3 +122,12 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`   Frontend URL: ${FRONTEND_URL}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// ── Keep Prisma connection alive (Railway idles after ~5 min) ─────
+setInterval(async () => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err) {
+    console.error('[KeepAlive] DB ping failed:', err);
+  }
+}, 4 * 60 * 1000); // every 4 minutes

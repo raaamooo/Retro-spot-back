@@ -4,7 +4,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-console.log("🚀 RAILWAY DEPLOY SUCCESSFUL - Version 3.0");
 const http_1 = require("http");
 const socket_io_1 = require("socket.io");
 const cors_1 = __importDefault(require("cors"));
@@ -15,6 +14,13 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const configManager_1 = require("./configManager");
 dotenv_1.default.config();
+// ── Crash handlers — prevent silent exits on Railway ──────────
+process.on('uncaughtException', (err) => {
+    console.error('[FATAL] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[FATAL] Unhandled Rejection:', reason);
+});
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://retrospot.up.railway.app';
@@ -112,3 +118,12 @@ httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`   Frontend URL: ${FRONTEND_URL}`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+// ── Keep Prisma connection alive (Railway idles after ~5 min) ─────
+setInterval(async () => {
+    try {
+        await prisma.$queryRaw `SELECT 1`;
+    }
+    catch (err) {
+        console.error('[KeepAlive] DB ping failed:', err);
+    }
+}, 4 * 60 * 1000); // every 4 minutes
