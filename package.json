@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "preinstall": "echo \"DATABASE_URL=postgresql://localhost:5432/db\" > .env",
+    "preinstall": "node -e \"const fs = require('fs'); if (!fs.existsSync('.env')) fs.writeFileSync('.env', 'DATABASE_URL=postgresql://localhost:5432/db\\\\n');\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch server.ts",
     "build": "export DATABASE_URL=${DATABASE_URL:-postgresql://localhost:5432/db} && tsc && npx prisma generate",
