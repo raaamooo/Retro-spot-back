@@ -1,0 +1,44 @@
+Unused files (35)
+add-takeaway.ts                  
+dist/add-takeaway.js             
+dist/check-items.js              
+dist/check-recipes.js            
+dist/configManager.js            
+dist/list-menu.js                
+dist/migrate-coffee.js           
+dist/print-all.js                
+dist/prisma.config.js            
+dist/prisma/seed-inventory.js    
+dist/prisma/seed.js              
+dist/routes/api.js               
+dist/seed-coffee.js              
+dist/seed-drinks.js              
+dist/seed-restore-menu.js        
+dist/services/AuditService.js    
+dist/services/BookingService.js  
+dist/services/ConfigService.js   
+dist/services/InventoryService.js
+dist/services/LoyaltyService.js  
+dist/services/OrderService.js    
+dist/socketEvents.js             
+dist/test-order.js               
+dist/test-qr.js                  
+dist/update-locations.js         
+dist/utils/pdf.js                
+dist/utils/qr.js                 
+list-menu.ts                     
+migrate-coffee.ts                
+prisma/seed-inventory.ts         
+seed-coffee.ts                   
+seed-drinks.ts                   
+seed-restore-menu.ts             
+services/LoyaltyService.ts       
+update-locations.ts              
+Unused dependencies (1)
+better-sqlite3  package.json:27:6
+Unused devDependencies (3)
+@types/bcryptjs        package.json:38:6
+@types/better-sqlite3  package.json:39:6
+nodemon                package.json:46:6
+Unused exported types (1)
+EventName  type  socketEvents.ts:83:13
