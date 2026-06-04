@@ -91,7 +91,7 @@ class OrderService {
                 }
             });
             // Auto-deplete inventory
-            await this.inventoryService.depleteInventoryForOrder(order.id);
+            await this.inventoryService.depleteForOrder(order.id);
             // Notify all clients (barista page, manager page, etc.)
             this.io.emit(socketEvents_1.EVENTS.ORDER_NEW, order);
             return order;

@@ -48,14 +48,14 @@ async function main() {
         const catPastry = await prisma.menuCategory.create({
             data: { nameEn: 'Pastries', nameAr: 'معجنات', sortOrder: 2 },
         });
-        // 4. Ingredients
+        // 4. Ingredients (v2 schema: currentStock, minimumStock, costPerUnit)
         const coffeeBeans = await prisma.ingredient.create({
-            data: { nameEn: 'Coffee Beans', nameAr: 'حبوب البن', unit: 'gram', quantityAvailable: 5000, lowStockThreshold: 1000 },
+            data: { nameEn: 'Coffee Beans', nameAr: 'حبوب البن', unit: 'gram', currentStock: 5000, minimumStock: 1000, costPerUnit: 0.15, category: 'dry_goods' },
         });
         const milk = await prisma.ingredient.create({
-            data: { nameEn: 'Milk', nameAr: 'حليب', unit: 'ml', quantityAvailable: 10000, lowStockThreshold: 2000 },
+            data: { nameEn: 'Milk', nameAr: 'حليب', unit: 'ml', currentStock: 10000, minimumStock: 2000, costPerUnit: 0.02, category: 'dairy' },
         });
-        // 5. Menu Items & Recipes
+        // 5. Menu Items & Recipes (v2 schema: quantityRequired)
         const espresso = await prisma.menuItem.create({
             data: {
                 categoryId: catCoffee.id,
@@ -69,7 +69,7 @@ async function main() {
             data: {
                 menuItemId: espresso.id,
                 ingredientId: coffeeBeans.id,
-                quantityUsed: 18, // 18 grams
+                quantityRequired: 18, // 18 grams
             },
         });
         const latte = await prisma.menuItem.create({
@@ -82,10 +82,10 @@ async function main() {
             },
         });
         await prisma.recipe.create({
-            data: { menuItemId: latte.id, ingredientId: coffeeBeans.id, quantityUsed: 18 },
+            data: { menuItemId: latte.id, ingredientId: coffeeBeans.id, quantityRequired: 18 },
         });
         await prisma.recipe.create({
-            data: { menuItemId: latte.id, ingredientId: milk.id, quantityUsed: 200 }, // 200 ml
+            data: { menuItemId: latte.id, ingredientId: milk.id, quantityRequired: 200 }, // 200 ml
         });
         console.log('Categories, items and recipes created');
     }

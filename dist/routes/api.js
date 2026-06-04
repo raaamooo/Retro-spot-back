@@ -40,9 +40,9 @@ exports.default = apiRoutes;
 const express_1 = require("express");
 const OrderService_1 = require("../services/OrderService");
 const InventoryService_1 = require("../services/InventoryService");
+const NotificationService_1 = require("../services/NotificationService");
 const BookingService_1 = require("../services/BookingService");
 const ConfigService_1 = require("../services/ConfigService");
-const AuditService_1 = require("../services/AuditService");
 const qr_1 = require("../utils/qr");
 const pdf_1 = require("../utils/pdf");
 const socketEvents_1 = require("../socketEvents");
@@ -50,9 +50,9 @@ const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 function apiRoutes(io, prisma) {
     const router = (0, express_1.Router)();
-    const auditService = new AuditService_1.AuditService(io);
+    const notificationService = new NotificationService_1.NotificationService(io);
     const configService = new ConfigService_1.ConfigService(io);
-    const inventoryService = new InventoryService_1.InventoryService(io, auditService);
+    const inventoryService = new InventoryService_1.InventoryService(io, notificationService);
     const orderService = new OrderService_1.OrderService(io, inventoryService, configService);
     const bookingService = new BookingService_1.BookingService(io);
     // Seed default config values on startup
@@ -83,35 +83,32 @@ function apiRoutes(io, prisma) {
             res.status(500).json({ error: 'Failed to fetch menu' });
         }
     });
-    router.get('/ingredients', async (req, res) => {
+    // ═══════════════════════════════════════════════════════════
+    //  INVENTORY v2 — Ingredients, Recipes, Suppliers, Purchases, Alerts
+    // ═══════════════════════════════════════════════════════════
+    // ── Ingredients ──
+    router.get('/inventory/ingredients', async (req, res) => {
         try {
-            const ingredients = await prisma.ingredient.findMany({ orderBy: { nameEn: 'asc' } });
+            const ingredients = await inventoryService.getAllIngredients();
             res.json(ingredients);
         }
         catch (err) {
             res.status(500).json({ error: 'Failed to fetch ingredients' });
         }
     });
-    /**
-     * POST /api/ingredients
-     * Create a new ingredient.
-     */
-    router.post('/ingredients', async (req, res) => {
+    router.post('/inventory/ingredients', async (req, res) => {
         try {
-            const { nameEn, nameAr, unit, quantityAvailable, lowStockThreshold, costPerUnit, supplierId } = req.body;
+            const { nameEn, nameAr, unit, currentStock, minimumStock, costPerUnit, category, supplierId } = req.body;
             if (!nameEn || !nameAr || !unit) {
                 return res.status(400).json({ error: 'nameEn, nameAr, and unit are required' });
             }
-            const ingredient = await prisma.ingredient.create({
-                data: {
-                    nameEn,
-                    nameAr,
-                    unit,
-                    quantityAvailable: Number(quantityAvailable) || 0,
-                    lowStockThreshold: Number(lowStockThreshold) || 10,
-                    costPerUnit: Number(costPerUnit) || 0,
-                    supplierId: supplierId || null,
-                }
+            const ingredient = await inventoryService.createIngredient({
+                nameEn, nameAr, unit,
+                currentStock: Number(currentStock) || 0,
+                minimumStock: Number(minimumStock) || 10,
+                costPerUnit: Number(costPerUnit) || 0,
+                category: category || null,
+                supplierId: supplierId || undefined,
             });
             res.json(ingredient);
         }
@@ -119,79 +116,178 @@ function apiRoutes(io, prisma) {
             res.status(500).json({ error: 'Failed to create ingredient' });
         }
     });
-    /**
-     * PATCH /api/ingredients/:id
-     * Manual stock adjustment by inventory worker.
-     */
-    router.patch('/ingredients/:id', async (req, res) => {
+    router.put('/inventory/ingredients/:id', async (req, res) => {
         try {
-            const { quantityAvailable, reason, staffName, details } = req.body;
-            if (quantityAvailable === undefined || isNaN(Number(quantityAvailable))) {
-                return res.status(400).json({ error: 'quantityAvailable must be a number' });
-            }
-            const ingredient = await inventoryService.updateStock(req.params.id, Number(quantityAvailable), reason || 'manual_adjustment', staffName || 'Staff', details);
+            const ingredient = await inventoryService.updateIngredient(req.params.id, req.body);
             res.json(ingredient);
         }
         catch (err) {
             res.status(500).json({ error: 'Failed to update ingredient' });
         }
     });
-    /**
-     * POST /api/ingredients/batch-restock
-     * Batch restock multiple ingredients.
-     */
-    router.post('/ingredients/batch-restock', async (req, res) => {
+    router.delete('/inventory/ingredients/:id', async (req, res) => {
         try {
-            const { items, staffName } = req.body;
-            if (!items || !Array.isArray(items)) {
-                return res.status(400).json({ error: 'items array is required' });
+            const result = await inventoryService.deleteIngredient(req.params.id);
+            res.json(result);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to delete ingredient' });
+        }
+    });
+    router.post('/inventory/ingredients/:id/restock', async (req, res) => {
+        try {
+            const { quantityAdded, pricePerUnit, supplierId, notes, adminId } = req.body;
+            if (!quantityAdded || !pricePerUnit) {
+                return res.status(400).json({ error: 'quantityAdded and pricePerUnit are required' });
             }
-            const results = await inventoryService.batchRestock(items, staffName || 'Staff');
-            res.json(results);
+            const result = await inventoryService.restockIngredient(req.params.id, Number(quantityAdded), Number(pricePerUnit), supplierId || undefined, notes || undefined, adminId || undefined);
+            res.json(result);
         }
         catch (err) {
-            res.status(500).json({ error: 'Failed to batch restock' });
+            res.status(500).json({ error: 'Failed to restock ingredient' });
         }
     });
-    /**
-     * GET /api/inventory/health
-     * Get inventory health dashboard data.
-     */
-    router.get('/inventory/health', async (req, res) => {
+    // ── Recipes ──
+    router.get('/inventory/recipes/:menuItemId', async (req, res) => {
         try {
-            const health = await inventoryService.getInventoryHealth();
-            res.json(health);
+            const recipes = await inventoryService.getRecipe(req.params.menuItemId);
+            res.json(recipes);
         }
         catch (err) {
-            res.status(500).json({ error: 'Failed to fetch inventory health' });
+            res.status(500).json({ error: 'Failed to fetch recipe' });
         }
     });
-    /**
-     * GET /api/inventory/logs
-     * Get stock change audit trail.
-     */
-    router.get('/inventory/logs', async (req, res) => {
+    router.post('/inventory/recipes', async (req, res) => {
         try {
-            const ingredientId = req.query.ingredientId;
-            const limit = parseInt(req.query.limit) || 100;
-            const logs = await auditService.getStockChangeLogs(ingredientId, limit);
-            res.json(logs);
+            const { menuItemId, lines } = req.body;
+            if (!menuItemId || !Array.isArray(lines)) {
+                return res.status(400).json({ error: 'menuItemId and lines array are required' });
+            }
+            const result = await inventoryService.setRecipe(menuItemId, lines);
+            res.json(result);
         }
         catch (err) {
-            res.status(500).json({ error: 'Failed to fetch inventory logs' });
+            res.status(500).json({ error: 'Failed to update recipe' });
         }
     });
-    /**
-     * GET /api/inventory/export
-     * Export full inventory data.
-     */
-    router.get('/inventory/export', async (req, res) => {
+    router.delete('/inventory/recipes/:menuItemId', async (req, res) => {
         try {
-            const data = await inventoryService.exportInventory();
-            res.json(data);
+            const result = await inventoryService.deleteRecipe(req.params.menuItemId);
+            res.json(result);
         }
         catch (err) {
-            res.status(500).json({ error: 'Failed to export inventory' });
+            res.status(500).json({ error: 'Failed to delete recipe' });
+        }
+    });
+    // ── Suppliers ──
+    router.get('/inventory/suppliers', async (req, res) => {
+        try {
+            const suppliers = await inventoryService.getAllSuppliers();
+            res.json(suppliers);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to fetch suppliers' });
+        }
+    });
+    router.post('/inventory/suppliers', async (req, res) => {
+        try {
+            const { name } = req.body;
+            if (!name)
+                return res.status(400).json({ error: 'name is required' });
+            const supplier = await inventoryService.createSupplier(req.body);
+            res.json(supplier);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to create supplier' });
+        }
+    });
+    router.put('/inventory/suppliers/:id', async (req, res) => {
+        try {
+            const supplier = await inventoryService.updateSupplier(req.params.id, req.body);
+            res.json(supplier);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to update supplier' });
+        }
+    });
+    router.delete('/inventory/suppliers/:id', async (req, res) => {
+        try {
+            const result = await inventoryService.deleteSupplier(req.params.id);
+            res.json(result);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to delete supplier' });
+        }
+    });
+    // ── Purchase History ──
+    router.get('/inventory/purchases', async (req, res) => {
+        try {
+            const purchases = await inventoryService.getPurchaseHistory({
+                ingredientId: req.query.ingredientId,
+                supplierId: req.query.supplierId,
+                startDate: req.query.startDate,
+                endDate: req.query.endDate,
+            });
+            res.json(purchases);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to fetch purchase history' });
+        }
+    });
+    router.get('/inventory/purchases/summary', async (req, res) => {
+        try {
+            const summary = await inventoryService.getPurchaseSummary({
+                startDate: req.query.startDate,
+                endDate: req.query.endDate,
+            });
+            res.json(summary);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to fetch purchase summary' });
+        }
+    });
+    // ── Stock Deduction ──
+    router.post('/inventory/deduct', async (req, res) => {
+        try {
+            const { ingredientId, quantityDeducted, reason, adminId } = req.body;
+            if (!ingredientId || !quantityDeducted || !reason) {
+                return res.status(400).json({ error: 'ingredientId, quantityDeducted, and reason are required' });
+            }
+            const result = await inventoryService.manualDeduction(ingredientId, Number(quantityDeducted), reason, adminId);
+            res.json(result);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to deduct stock' });
+        }
+    });
+    // ── Alerts ──
+    router.get('/inventory/alerts', async (req, res) => {
+        try {
+            const resolved = req.query.resolved === 'true' ? true : req.query.resolved === 'false' ? false : undefined;
+            const alerts = await inventoryService.getAlerts(resolved);
+            res.json(alerts);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to fetch alerts' });
+        }
+    });
+    router.patch('/inventory/alerts/:id/resolve', async (req, res) => {
+        try {
+            const alert = await inventoryService.resolveAlert(req.params.id);
+            res.json(alert);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to resolve alert' });
+        }
+    });
+    // ── Dashboard ──
+    router.get('/inventory/dashboard', async (req, res) => {
+        try {
+            const dashboard = await inventoryService.getDashboard();
+            res.json(dashboard);
+        }
+        catch (err) {
+            res.status(500).json({ error: 'Failed to fetch inventory dashboard' });
         }
     });
     /**
@@ -348,42 +444,7 @@ function apiRoutes(io, prisma) {
     // ═══════════════════════════════════════════════════════════
     //  RECIPES
     // ═══════════════════════════════════════════════════════════
-    router.get('/menu-items/:id/recipes', async (req, res) => {
-        try {
-            const recipes = await prisma.recipe.findMany({
-                where: { menuItemId: req.params.id },
-                include: { ingredient: true },
-            });
-            res.json(recipes);
-        }
-        catch (err) {
-            res.status(500).json({ error: 'Failed to fetch recipes' });
-        }
-    });
-    router.put('/menu-items/:id/recipes', async (req, res) => {
-        try {
-            const menuItemId = req.params.id;
-            const lines = req.body;
-            await prisma.recipe.deleteMany({ where: { menuItemId } });
-            if (lines.length > 0) {
-                await prisma.recipe.createMany({
-                    data: lines.map(l => ({ menuItemId, ingredientId: l.ingredientId, quantityUsed: l.quantityUsed })),
-                });
-            }
-            const allRecipes = await prisma.recipe.findMany({
-                where: { menuItemId },
-                include: { ingredient: true },
-            });
-            const allInStock = allRecipes.length === 0 || allRecipes.every(r => r.ingredient.quantityAvailable > 0);
-            await prisma.menuItem.update({ where: { id: menuItemId }, data: { available: allInStock } });
-            const allItems = await prisma.menuItem.findMany({ select: { id: true, available: true } });
-            io.emit(socketEvents_1.EVENTS.MENU_AVAILABILITY, allItems);
-            res.json({ success: true, available: allInStock });
-        }
-        catch (err) {
-            res.status(500).json({ error: 'Failed to update recipes' });
-        }
-    });
+    // (Old recipe routes removed — now under /inventory/recipes/:menuItemId)
     // ═══════════════════════════════════════════════════════════
     //  LOCATIONS
     // ═══════════════════════════════════════════════════════════
@@ -944,67 +1005,7 @@ function apiRoutes(io, prisma) {
             res.status(500).json({ error: 'Failed to delete worker' });
         }
     });
-    // ═══════════════════════════════════════════════════════════
-    //  SUPPLIERS
-    // ═══════════════════════════════════════════════════════════
-    router.get('/suppliers', async (req, res) => {
-        try {
-            const suppliers = await prisma.supplier.findMany({
-                where: { active: true },
-                orderBy: { name: 'asc' },
-            });
-            res.json(suppliers);
-        }
-        catch (err) {
-            res.status(500).json({ error: 'Failed to fetch suppliers' });
-        }
-    });
-    router.post('/suppliers', async (req, res) => {
-        try {
-            const { name, contactPerson, email, phone, address } = req.body;
-            if (!name)
-                return res.status(400).json({ error: 'name is required' });
-            const supplier = await prisma.supplier.create({
-                data: { name, contactPerson, email, phone, address },
-            });
-            res.json(supplier);
-        }
-        catch (err) {
-            res.status(500).json({ error: 'Failed to create supplier' });
-        }
-    });
-    router.patch('/suppliers/:id', async (req, res) => {
-        try {
-            const { name, contactPerson, email, phone, address, active } = req.body;
-            const data = {};
-            if (name !== undefined)
-                data.name = name;
-            if (contactPerson !== undefined)
-                data.contactPerson = contactPerson;
-            if (email !== undefined)
-                data.email = email;
-            if (phone !== undefined)
-                data.phone = phone;
-            if (address !== undefined)
-                data.address = address;
-            if (active !== undefined)
-                data.active = active;
-            const supplier = await prisma.supplier.update({ where: { id: req.params.id }, data });
-            res.json(supplier);
-        }
-        catch (err) {
-            res.status(500).json({ error: 'Failed to update supplier' });
-        }
-    });
-    router.delete('/suppliers/:id', async (req, res) => {
-        try {
-            await prisma.supplier.update({ where: { id: req.params.id }, data: { active: false } });
-            res.json({ success: true });
-        }
-        catch (err) {
-            res.status(500).json({ error: 'Failed to delete supplier' });
-        }
-    });
+    // (Old supplier routes removed — now under /inventory/suppliers)
     // ═══════════════════════════════════════════════════════════
     //  SYSTEM CONFIGURATION
     // ═══════════════════════════════════════════════════════════

@@ -58,7 +58,7 @@ async function main() {
   console.log(`Created ${categoryMap.size} categories.`);
 
   let imported = 0;
-  for (const row of records) {
+  for (const row of records as any[]) {
     const catName = row.Category.trim();
     if (!catName) continue;
     
