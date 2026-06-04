@@ -77,37 +77,114 @@ model Addition {
   active                Boolean  @default(true)
 }
 
-// 6. Ingredients
+// ═══════════════════════════════════════════════════════════
+//  INVENTORY SYSTEM (v2 — rebuilt from scratch)
+// ═══════════════════════════════════════════════════════════
+
+// 6. Ingredients — master list
 model Ingredient {
-  id                String    @id @default(uuid())
-  nameEn            String
-  nameAr            String
-  unit              String    // liter, ml, gram, kg, piece
-  quantityAvailable Float
-  lowStockThreshold Float
-  costPerUnit       Float     @default(0)
-  category          String?   // dairy, beans, syrup, produce, dry-goods, packaging, etc.
-  expiryDate        DateTime?
-  supplierId        String?
-  active            Boolean   @default(true)
+  id            String    @id @default(uuid())
+  nameEn        String
+  nameAr        String
+  unit          String    // grams, ml, pieces, kg
+  currentStock  Float     @default(0)
+  minimumStock  Float     @default(10)
+  costPerUnit   Float     @default(0)
+  category      String?   // dairy, fruits, syrups, dry goods, packaging, etc.
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  supplier          Supplier?        @relation(fields: [supplierId], references: [id])
-  recipes           Recipe[]
-  stockChangeLogs   StockChangeLog[]
+  ingredientSupplier IngredientSupplier?
+  recipes            Recipe[]
+  purchaseHistory    PurchaseHistory[]
+  stockDeductions    StockDeduction[]
+  stockAlerts        StockAlert[]
 }
 
-// 7. Item Ingredients Recipe
+// 7. Suppliers
+model Supplier {
+  id          String    @id @default(uuid())
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  ingredientSuppliers IngredientSupplier[]
+  purchaseHistory     PurchaseHistory[]
+}
+
+// 8. IngredientSupplier — one supplier per ingredient
+model IngredientSupplier {
+  id           String @id @default(uuid())
+  ingredientId String @unique
+  supplierId   String
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  supplier   Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+}
+
+// 9. Recipes — which ingredients per menu item
 model Recipe {
-  id           String     @id @default(uuid())
-  menuItemId   String
-  ingredientId String
-  quantityUsed Float
+  id               String @id @default(uuid())
+  menuItemId       String
+  ingredientId     String
+  quantityRequired Float  // how much of ingredient per 1 serving
 
-  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id])
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  menuItem   MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, ingredientId])
 }
 
-// 8. Orders
+// 10. Purchase History — restock log
+model PurchaseHistory {
+  id            String    @id @default(uuid())
+  ingredientId  String
+  supplierId    String?
+  quantityAdded Float
+  pricePerUnit  Float     // price paid per unit at time of purchase
+  totalCost     Float     // quantityAdded * pricePerUnit (computed at insert)
+  purchasedAt   DateTime  @default(now())
+  notes         String?
+  adminId       String?   // who logged the restock
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  supplier   Supplier?  @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+}
+
+// 11. Stock Deductions — audit trail
+model StockDeduction {
+  id               String   @id @default(uuid())
+  ingredientId     String
+  quantityDeducted Float
+  reason           String   // 'order', 'manual_adjustment', 'waste'
+  orderId          String?  // if reason is 'order'
+  deductedAt       DateTime @default(now())
+  adminId          String?
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+}
+
+// 12. Stock Alerts — low stock & out of stock alerts log
+model StockAlert {
+  id           String    @id @default(uuid())
+  ingredientId String
+  alertType    String    // 'low_stock', 'out_of_stock'
+  triggeredAt  DateTime  @default(now())
+  resolvedAt   DateTime?
+  isResolved   Boolean   @default(false)
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ORDERS & POS
+// ═══════════════════════════════════════════════════════════
+
+// 13. Orders
 model Order {
   id              String   @id @default(uuid())
   locationId      String
@@ -138,7 +215,7 @@ model Order {
   receiptGroupId  String?
 }
 
-// 9. Order Items
+// 14. Order Items
 model OrderItem {
   id              String   @id @default(uuid())
   orderId         String
@@ -155,7 +232,7 @@ model OrderItem {
   menuItem        MenuItem @relation(fields: [menuItemId], references: [id])
 }
 
-// 10. Waiter Calls
+// 15. Waiter Calls
 model WaiterCall {
   id         String    @id @default(uuid())
   locationId String
@@ -167,7 +244,7 @@ model WaiterCall {
   location   Location  @relation(fields: [locationId], references: [id])
 }
 
-// 11. Receipt Groups
+// 16. Receipt Groups
 model ReceiptGroup {
   id         String    @id @default(uuid())
   locationId String
@@ -180,7 +257,7 @@ model ReceiptGroup {
   orders     Order[]
 }
 
-// 12. Bookings
+// 17. Bookings
 model Booking {
   id                       String    @id @default(uuid())
   eventType                String
@@ -198,7 +275,7 @@ model Booking {
   createdAt                DateTime  @default(now())
 }
 
-// 13. Arts
+// 18. Arts
 model Art {
   id            String   @id @default(uuid())
   titleEn       String
@@ -214,7 +291,7 @@ model Art {
   bids          ArtBid[]
 }
 
-// 14. Art Bids
+// 19. Art Bids
 model ArtBid {
   id                       String   @id @default(uuid())
   artId                    String
@@ -230,7 +307,7 @@ model ArtBid {
   art                      Art      @relation(fields: [artId], references: [id])
 }
 
-// 15. News
+// 20. News
 model News {
   id            String    @id @default(uuid())
   titleEn       String
@@ -244,7 +321,7 @@ model News {
   endDate       DateTime?
 }
 
-// 16. Accounting Records
+// 21. Accounting Records
 model AccountingRecord {
   id            String   @id @default(uuid())
   source        String   // menu, booking, art, bid, tip
@@ -254,36 +331,7 @@ model AccountingRecord {
   createdAt     DateTime @default(now())
 }
 
-// 17. Suppliers
-model Supplier {
-  id            String   @id @default(uuid())
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  lastOrderDate DateTime?
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-
-  ingredients   Ingredient[]
-}
-
-// 18. Stock Change Log (Audit Trail)
-model StockChangeLog {
-  id            String   @id @default(uuid())
-  ingredientId  String
-  previousQty   Float
-  newQty        Float
-  reason        String   // sale, manual_adjustment, waste, restock, void
-  staffName     String
-  details       String?  // additional context
-  createdAt     DateTime @default(now())
-
-  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
-}
-
-// 19. System Configuration
+// 22. System Configuration
 model SystemConfig {
   id    String @id @default(uuid())
   key   String @unique
@@ -291,7 +339,7 @@ model SystemConfig {
   label String? // human-readable label
 }
 
-// 20. Loyalty Accounts
+// 23. Loyalty Accounts
 model LoyaltyAccount {
   id            String   @id @default(uuid())
   phoneNumber   String   @unique
@@ -303,7 +351,7 @@ model LoyaltyAccount {
   updatedAt     DateTime @updatedAt
 }
 
-// 21. Shift Logs
+// 24. Shift Logs
 model ShiftLog {
   id            String    @id @default(uuid())
   userId        String

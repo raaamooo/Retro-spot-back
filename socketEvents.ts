@@ -38,15 +38,21 @@ export const EVENTS = {
   /** Emitted when a waiter resolves/handles a call. */
   WAITER_CALL_RESOLVED: 'waiter_call:resolved',
 
-  // ── Inventory ──
-  /** Emitted when ingredient stock levels change (full ingredient list). */
-  INVENTORY_UPDATED: 'inventory:updated',
-  /** Emitted when a specific ingredient drops below its low-stock threshold. */
+  // ── Inventory (v2) ──
+  /** Emitted when ingredient hits minimum_stock threshold. */
   INVENTORY_LOW_STOCK: 'inventory:low_stock',
-  /** Emitted when menu item availability changes due to inventory. */
+  /** Emitted when ingredient hits 0 stock. */
+  INVENTORY_OUT_OF_STOCK: 'inventory:out_of_stock',
+  /** Emitted when any stock changes (restock or deduction). */
+  INVENTORY_STOCK_UPDATED: 'inventory:stock_updated',
+  /** Emitted when a restock purchase is logged. */
+  INVENTORY_RESTOCK_LOGGED: 'inventory:restock_logged',
+  /** Emitted when a menu item is auto-disabled due to 0 stock. */
+  MENU_ITEM_UNAVAILABLE: 'menu:item_unavailable',
+  /** Emitted when a menu item is re-enabled after restock. */
+  MENU_ITEM_AVAILABLE: 'menu:item_available',
+  /** Emitted with full menu availability array for bulk UI updates. */
   MENU_AVAILABILITY: 'menu:availability',
-  /** Emitted when a stock change is logged (audit trail). */
-  STOCK_CHANGE_LOGGED: 'inventory:stock_change_logged',
 
   // ── Bookings ──
   /** Emitted when a customer submits a new booking. */
