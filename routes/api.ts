@@ -654,6 +654,8 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
 
   router.delete('/orders/:id', async (req, res) => {
     try {
+      // Restore the ingredients stock before deleting the order and its items
+      await inventoryService.restoreStockForOrder(req.params.id);
       await prisma.orderItem.deleteMany({ where: { orderId: req.params.id } });
       await prisma.order.delete({ where: { id: req.params.id } });
       res.json({ success: true });

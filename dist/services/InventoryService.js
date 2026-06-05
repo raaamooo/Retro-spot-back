@@ -162,6 +162,8 @@ class InventoryService {
             if (!order)
                 return;
             for (const orderItem of order.items) {
+                if (orderItem.voided)
+                    continue; // Skip voided items
                 for (const recipe of orderItem.menuItem.recipes) {
                     const totalUsed = recipe.quantityRequired * orderItem.quantity;
                     const ingredient = await prisma.ingredient.update({
@@ -185,6 +187,68 @@ class InventoryService {
         }
         catch (error) {
             console.error('[InventoryService:depleteForOrder] ERROR:', error);
+        }
+    }
+    /**
+     * Restore stock for all non-voided items in an order.
+     * Useful when an order is updated or deleted.
+     */
+    async restoreStockForOrder(orderId) {
+        try {
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: {
+                    items: {
+                        where: { voided: false },
+                        include: {
+                            menuItem: {
+                                include: { recipes: true },
+                            },
+                        },
+                    },
+                },
+            });
+            if (!order)
+                return;
+            for (const orderItem of order.items) {
+                for (const recipe of orderItem.menuItem.recipes) {
+                    const totalUsed = recipe.quantityRequired * orderItem.quantity;
+                    // Increment stock back
+                    const ingredient = await prisma.ingredient.update({
+                        where: { id: recipe.ingredientId },
+                        data: { currentStock: { increment: totalUsed } },
+                    });
+                    // Delete corresponding stock deductions for this order
+                    await prisma.stockDeduction.deleteMany({
+                        where: {
+                            orderId: orderId,
+                            ingredientId: recipe.ingredientId,
+                            reason: 'order',
+                        },
+                    });
+                    // Resolve alerts based on new stock level
+                    if (ingredient.currentStock > ingredient.minimumStock) {
+                        await prisma.stockAlert.updateMany({
+                            where: { ingredientId: recipe.ingredientId, isResolved: false },
+                            data: { isResolved: true, resolvedAt: new Date() },
+                        });
+                    }
+                    else if (ingredient.currentStock > 0) {
+                        await prisma.stockAlert.updateMany({
+                            where: { ingredientId: recipe.ingredientId, alertType: 'out_of_stock', isResolved: false },
+                            data: { isResolved: true, resolvedAt: new Date() },
+                        });
+                    }
+                    // Re-enable menu items if all ingredients are now in stock
+                    if (ingredient.currentStock > 0) {
+                        await this.reenableMenuItemsUsingIngredient(recipe.ingredientId);
+                    }
+                }
+            }
+            this.io.emit('inventory:stock_updated', { action: 'order_restored', orderId });
+        }
+        catch (error) {
+            console.error('[InventoryService:restoreStockForOrder] ERROR:', error);
         }
     }
     // ─── ALERTS ────────────────────────────────────────────────

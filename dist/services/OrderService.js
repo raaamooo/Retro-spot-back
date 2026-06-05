@@ -139,6 +139,8 @@ class OrderService {
         return order;
     }
     async updateOrder(orderId, data) {
+        // Restore stock of the current order items before making changes
+        await this.inventoryService.restoreStockForOrder(orderId);
         const order = await prisma.order.update({
             where: { id: orderId },
             data: {
@@ -171,6 +173,8 @@ class OrderService {
                 location: true
             }
         });
+        // Deplete stock for the new order items
+        await this.inventoryService.depleteForOrder(order.id);
         this.io.emit(socketEvents_1.EVENTS.ORDER_STATUS_UPDATED, order);
         return order;
     }
