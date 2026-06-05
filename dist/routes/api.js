@@ -480,8 +480,11 @@ function apiRoutes(io, prisma) {
     });
     router.get('/locations/:id/qr', async (req, res) => {
         try {
+            const location = await prisma.location.findUnique({ where: { id: req.params.id } });
+            if (!location)
+                return res.status(404).json({ error: 'Location not found' });
             const baseUrl = req.query.baseUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
-            const qrDataUrl = await (0, qr_1.generateLocationQR)(req.params.id, baseUrl);
+            const qrDataUrl = await (0, qr_1.generateLocationQR)(location.name, baseUrl);
             res.json({ qrCodeUrl: qrDataUrl });
         }
         catch (err) {

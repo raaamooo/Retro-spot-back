@@ -5,9 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateLocationQR = generateLocationQR;
 const qrcode_1 = __importDefault(require("qrcode"));
-async function generateLocationQR(locationId, baseUrl) {
+async function generateLocationQR(locationName, baseUrl) {
     try {
-        const url = `${baseUrl}/menu?locationId=${locationId}`;
+        const encodedLocation = encodeURIComponent(locationName);
+        const url = `${baseUrl}/menu?location=${encodedLocation}`;
         // Generate high-fidelity SVG string instead of PNG
         const svg = await qrcode_1.default.toString(url, {
             type: 'svg',

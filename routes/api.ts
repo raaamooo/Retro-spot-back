@@ -453,8 +453,11 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
 
   router.get('/locations/:id/qr', async (req, res) => {
     try {
+      const location = await prisma.location.findUnique({ where: { id: req.params.id } });
+      if (!location) return res.status(404).json({ error: 'Location not found' });
+      
       const baseUrl = (req.query.baseUrl as string) || process.env.FRONTEND_URL || 'http://localhost:3000';
-      const qrDataUrl = await generateLocationQR(req.params.id, baseUrl);
+      const qrDataUrl = await generateLocationQR(location.name, baseUrl);
       res.json({ qrCodeUrl: qrDataUrl });
     } catch (err) {
       res.status(500).json({ error: 'Failed to generate QR' });

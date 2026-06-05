@@ -118,6 +118,9 @@ httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`   Frontend URL: ${FRONTEND_URL}`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+// Fix 502 Bad Gateway errors by matching proxy keep-alive timeouts
+httpServer.keepAliveTimeout = 65000;
+httpServer.headersTimeout = 66000;
 // ── Keep Prisma connection alive (Railway idles after ~5 min) ─────
 setInterval(async () => {
     try {
