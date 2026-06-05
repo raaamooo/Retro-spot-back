@@ -2,7 +2,8 @@ import QRCode from 'qrcode';
 
 export async function generateLocationQR(locationName: string, baseUrl: string): Promise<string> {
   try {
-    const encodedLocation = encodeURIComponent(locationName);
+    const sanitizedLocation = locationName.replace(/\s+/g, '');
+    const encodedLocation = encodeURIComponent(sanitizedLocation);
     const url = `${baseUrl}/menu?location=${encodedLocation}`;
     
     // Generate high-fidelity SVG string instead of PNG
