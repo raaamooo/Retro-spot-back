@@ -811,6 +811,18 @@ export default function apiRoutes(io: Server, prisma: PrismaClient) {
     }
   });
 
+  router.delete('/bids/:id', async (req, res) => {
+    try {
+      const bid = await prisma.artBid.findUnique({ where: { id: req.params.id } });
+      if (!bid) return res.status(404).json({ error: 'Bid not found' });
+      await prisma.artBid.delete({ where: { id: req.params.id } });
+      io.emit(EVENTS.BID_DELETED, { id: req.params.id, artId: bid.artId });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to delete bid' });
+    }
+  });
+
   router.post('/arts', upload.single('photo'), async (req, res) => {
     try {
       const artData: any = {

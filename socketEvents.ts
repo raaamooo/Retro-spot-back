@@ -63,6 +63,8 @@ export const EVENTS = {
   // ── Arts & Bids ──
   /** Emitted when a customer places a new bid on an art piece. */
   BID_NEW: 'bid:new',
+  /** Emitted when an organizer deletes a bid. */
+  BID_DELETED: 'bid:deleted',
   /** Emitted when organizer updates an art piece's status (approved, sold, etc.). */
   ART_STATUS_UPDATED: 'art:status_updated',
 

@@ -833,6 +833,19 @@ function apiRoutes(io, prisma) {
             res.status(500).json({ error: err.message || 'Bid failed' });
         }
     });
+    router.delete('/bids/:id', async (req, res) => {
+        try {
+            const bid = await prisma.artBid.findUnique({ where: { id: req.params.id } });
+            if (!bid)
+                return res.status(404).json({ error: 'Bid not found' });
+            await prisma.artBid.delete({ where: { id: req.params.id } });
+            io.emit(socketEvents_1.EVENTS.BID_DELETED, { id: req.params.id, artId: bid.artId });
+            res.json({ success: true });
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message || 'Failed to delete bid' });
+        }
+    });
     router.post('/arts', upload.single('photo'), async (req, res) => {
         try {
             const artData = {
