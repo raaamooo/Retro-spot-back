@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('Starting CSV Import...');
-  const csvPath = path.join(__dirname, '../Data/Retro Spot Menu Items 2df0b7aadaf74a819425c5d4b7cf4f66.csv');
+  const csvPath = path.join(__dirname, '../Data/menu-cvs/Retro Spot Menu Items 2df0b7aadaf74a819425c5d4b7cf4f66.csv');
   
   if (!fs.existsSync(csvPath)) {
     console.error('CSV file not found at:', csvPath);
